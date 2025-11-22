@@ -1,13 +1,13 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Menu, Send, Plus, Search, RefreshCw, Download, FileText, ChevronRight, ShieldAlert, BookOpen, Globe, Briefcase, Calendar, ChevronLeft, Save, Trash2, Check, Lightbulb, Printer, Settings as SettingsIcon, MessageCircle, Mail, X, Bell, Database, Upload, Pin, PinOff, BarChart2 } from 'lucide-react';
+import { Menu, Send, Plus, Search, RefreshCw, Download, FileText, ChevronRight, ShieldAlert, BookOpen, Globe, Briefcase, Calendar, ChevronLeft, Save, Trash2, Check, Lightbulb, Printer, Settings as SettingsIcon, MessageCircle, Mail, X, Bell, Database, Upload, Pin, PinOff, BarChart2, Sparkles } from 'lucide-react';
 import Navigation from './components/Navigation';
 import MarkdownRenderer from './components/MarkdownRenderer';
 import ShareButton from './components/ShareButton';
 import IncidentChart from './components/IncidentChart';
 import { View, ChatMessage, Template, SecurityRole, StoredReport, WeeklyTip, UserProfile, KnowledgeDocument } from './types';
 import { STATIC_TEMPLATES } from './constants';
-import { generateAdvisorResponse, generateTrainingModule, analyzeReport, fetchBestPractices, generateWeeklyInsights, generateWeeklyTip } from './services/geminiService';
+import { generateAdvisorResponse, generateTrainingModule, analyzeReport, fetchBestPractices, generateWeeklyInsights, generateWeeklyTip, getTrainingSuggestions } from './services/geminiService';
 
 function App() {
   const [currentView, setCurrentView] = useState<View>(View.DASHBOARD);
@@ -53,6 +53,8 @@ function App() {
   const [trainingContent, setTrainingContent] = useState('');
   const [isTrainingLoading, setIsTrainingLoading] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [suggestedTopics, setSuggestedTopics] = useState<string[]>([]);
+  const [isSuggestingTopics, setIsSuggestingTopics] = useState(false);
 
   // --- Report Analyzer State ---
   const [reportText, setReportText] = useState('');
@@ -230,6 +232,13 @@ function App() {
     const content = await generateTrainingModule(trainingRole, trainingTopic);
     setTrainingContent(content);
     setIsTrainingLoading(false);
+  };
+
+  const handleGetTrainingSuggestions = async () => {
+    setIsSuggestingTopics(true);
+    const topics = await getTrainingSuggestions(storedReports);
+    setSuggestedTopics(topics);
+    setIsSuggestingTopics(false);
   };
 
   const handleSaveTemplate = () => {
@@ -1069,6 +1078,38 @@ function App() {
               placeholder="e.g., Radio Discipline, Conflict De-escalation"
               className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-blue-500 focus:outline-none"
             />
+            
+            <div className="mt-2">
+               {!isSuggestingTopics && suggestedTopics.length === 0 && (
+                 <button 
+                   onClick={handleGetTrainingSuggestions}
+                   className="text-xs flex items-center gap-1 text-blue-400 hover:text-blue-300 transition-colors"
+                 >
+                   <Sparkles size={12} />
+                   Ask AI to suggest topics based on recent incidents
+                 </button>
+               )}
+               
+               {isSuggestingTopics && (
+                 <div className="text-xs text-slate-500 flex items-center gap-2">
+                   <RefreshCw size={12} className="animate-spin" /> Analyzing reports...
+                 </div>
+               )}
+
+               {suggestedTopics.length > 0 && (
+                 <div className="flex flex-wrap gap-2 mt-2">
+                   {suggestedTopics.map((topic, idx) => (
+                     <button
+                       key={idx}
+                       onClick={() => setTrainingTopic(topic)}
+                       className="bg-slate-700 hover:bg-blue-600 hover:text-white text-slate-300 text-[10px] px-2 py-1 rounded-full transition-colors border border-slate-600"
+                     >
+                       {topic}
+                     </button>
+                   ))}
+                 </div>
+               )}
+            </div>
           </div>
 
           <button

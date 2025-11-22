@@ -96,6 +96,37 @@ export const generateTrainingModule = async (audience: string, topic: string): P
   }
 };
 
+// Training Topic Suggestions
+export const getTrainingSuggestions = async (recentReports: StoredReport[]): Promise<string[]> => {
+  try {
+    const context = recentReports.length > 0 
+      ? `RECENT INTERNAL INCIDENTS:\n${recentReports.slice(0, 5).map(r => `- ${r.content.substring(0, 100)}...`).join('\n')}`
+      : "NO RECENT INTERNAL INCIDENTS.";
+
+    const prompt = `
+      Based on the following context, suggest 3 specific, high-value training topics for security guards.
+      
+      1. ${context}
+      2. CURRENT GLOBAL SECURITY TRENDS (e.g., De-escalation, Access Control, Cyber-Physical hygiene).
+
+      OUTPUT REQUIREMENT:
+      Return ONLY a list of 3 topics separated by "|||". Do not add numbering or extra text.
+      Example: Radio Discipline|||Vehicle Search Procedures|||Conflict De-escalation
+    `;
+
+    const response: GenerateContentResponse = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+    });
+
+    const text = response.text || "";
+    return text.split('|||').map(t => t.trim()).filter(t => t.length > 0);
+  } catch (error) {
+    console.error("Suggestion Error:", error);
+    return ["Access Control Basics", "Report Writing 101", "Emergency Response"]; // Fallbacks
+  }
+};
+
 // Weekly Tip Generator
 export const generateWeeklyTip = async (topic?: string): Promise<string> => {
   try {

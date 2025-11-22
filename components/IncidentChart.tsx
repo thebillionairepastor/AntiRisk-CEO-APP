@@ -1,4 +1,3 @@
-
 import React, { useMemo } from 'react';
 import { StoredReport } from '../types';
 
@@ -52,7 +51,7 @@ const IncidentChart: React.FC<IncidentChartProps> = ({ reports }) => {
       <h4 className="text-sm font-bold text-slate-400 uppercase mb-6 tracking-wider">Incident Type Frequency (Last 30 Days)</h4>
       
       <div className="flex items-end justify-between gap-4 h-40 px-2">
-        {Object.entries(stats.categories).map(([label, data]) => {
+        {Object.entries(stats.categories).map(([label, data]: [string, CategoryStat]) => {
           // Calculate height percentage (min 5% for visibility)
           const heightPct = Math.max((data.count / stats.maxCount) * 100, 5);
           
