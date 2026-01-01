@@ -188,9 +188,14 @@ function App() {
     const query = forceQuery || bpSearchQuery;
     if (!query.trim()) return;
     setIsBpLoading(true);
-    const result = await fetchBestPractices(query);
-    setBpResult(result);
-    setIsBpLoading(false);
+    try {
+      const result = await fetchBestPractices(query);
+      setBpResult(result);
+    } catch (err) {
+      console.error("BP Fetch Error:", err);
+    } finally {
+      setIsBpLoading(false);
+    }
   };
 
   const handleDashboardUpdateClick = (topic: string) => {
@@ -335,9 +340,9 @@ function App() {
           <button 
             onClick={() => handleFetchBP()}
             disabled={isBpLoading || !bpSearchQuery.trim()}
-            className="bg-[#2962ff] hover:bg-blue-700 p-5 rounded-2xl text-white shadow-xl active:scale-95 disabled:opacity-50"
+            className="bg-[#2962ff] hover:bg-blue-700 p-5 rounded-2xl text-white shadow-xl active:scale-95 disabled:opacity-50 min-w-[70px] flex items-center justify-center"
           >
-            {isBpLoading ? <RefreshCw className="animate-spin" /> : <Search size={28} />}
+            {isBpLoading ? <RefreshCw className="animate-spin" size={24} /> : <Search size={28} />}
           </button>
         </div>
       </div>
@@ -786,4 +791,27 @@ function App() {
                      <input value={userProfile.phoneNumber} onChange={(e) => setUserProfile({...userProfile, phoneNumber: e.target.value})} className="w-full bg-slate-950/50 border border-slate-700 p-6 pl-14 rounded-2xl outline-none text-white font-bold text-lg" placeholder="+234 WhatsApp Number" />
                    </div>
                    <div className="relative">
-                     <Mail className="absolute left-6 top-6 text-slate-500" size={20
+                     <Mail className="absolute left-6 top-6 text-slate-500" size={20} />
+                     <input value={userProfile.email} onChange={(e) => setUserProfile({...userProfile, email: e.target.value})} className="w-full bg-slate-950/50 border border-slate-700 p-6 pl-14 rounded-2xl outline-none text-white font-bold text-lg" placeholder="Executive Email" />
+                   </div>
+                </div>
+              </div>
+
+              <div className="bg-slate-800/20 border border-white/5 p-6 rounded-3xl">
+                 <div className="flex items-center gap-3 mb-2">
+                   <Bell size={18} className="text-blue-400" />
+                   <h5 className="text-white font-bold">Bi-Weekly Synthesis</h5>
+                 </div>
+                 <p className="text-slate-500 text-sm leading-relaxed">The AI will automatically generate and alert you to new tactical standards every 14 days.</p>
+              </div>
+
+              <button onClick={() => setShowSettings(false)} className="w-full bg-[#2962ff] hover:bg-blue-700 py-6 rounded-3xl font-black text-xl shadow-xl active:scale-95 transition-all">Save Protocols</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default App;

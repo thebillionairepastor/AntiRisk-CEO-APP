@@ -5,7 +5,6 @@ import { ChatMessage, StoredReport, KnowledgeDocument } from "../types";
 
 /**
  * Advisor Chat with Streaming for High Performance
- * Optimized for maximum speed by disabling thinking budget and reducing temperature.
  */
 export const generateAdvisorResponseStream = async (
   history: ChatMessage[], 
@@ -73,8 +72,7 @@ export const analyzeReport = async (reportText: string, previousReports: StoredR
 };
 
 /**
- * NEW: Cross-Report Operational Insights Service
- * Detects patterns, trends, and strategic vulnerabilities across multiple logs.
+ * Cross-Report Operational Insights Service
  */
 export const generateOperationalInsights = async (reports: StoredReport[]): Promise<string> => {
   if (reports.length === 0) return "Insufficient data for pattern detection.";
@@ -100,26 +98,29 @@ export const generateOperationalInsights = async (reports: StoredReport[]): Prom
 
 /**
  * Intelligence Hub Service with Google Search Grounding
+ * Optimized: Removed explicit thinkingBudget to ensure tool synthesis works correctly.
  */
 export const fetchBestPractices = async (topic: string): Promise<{ text: string; sources?: any[] }> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: `Search for the latest global best practices, regulatory requirements, and tactical updates regarding: ${topic}. Focus on private security industry standards.`,
+      contents: `Find and synthesize the latest global security best practices, regulatory updates, and tactical standards regarding: ${topic}. Ensure the answer is grounded in current web search data.`,
       config: { 
         tools: [{ googleSearch: {} }],
-        temperature: 0.3,
-        thinkingConfig: { thinkingBudget: 0 }
+        temperature: 0.2,
       },
     });
 
-    const metadata = response.candidates?.[0]?.groundingMetadata;
+    // Extract grounding sources safely
+    const candidate = response.candidates?.[0];
+    const metadata = candidate?.groundingMetadata;
+    
     const sources = metadata?.groundingChunks
       ?.map((chunk: any) => chunk.web)
       .filter((web: any) => web && web.uri)
       .map((web: any) => ({
-        title: web.title || 'Validated Intelligence Source',
+        title: web.title || 'Intelligence Source',
         url: web.uri
       })) || [];
 
@@ -129,7 +130,7 @@ export const fetchBestPractices = async (topic: string): Promise<{ text: string;
     };
   } catch (error) {
     console.error("Grounding Error:", error);
-    return { text: "⚠️ **Intelligence Retrieval Failure.** Unable to ground this query in real-time global data.", sources: [] };
+    return { text: "⚠️ **Intelligence Retrieval Failure.** Unable to ground this query in real-time global data. Please check your connectivity or try a broader topic.", sources: [] };
   }
 };
 
