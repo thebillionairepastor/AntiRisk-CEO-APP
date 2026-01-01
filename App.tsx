@@ -1,1422 +1,789 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Menu, Send, Plus, Search, RefreshCw, Download, FileText, ChevronRight, ShieldAlert, BookOpen, Globe, Briefcase, Calendar, ChevronLeft, Save, Trash2, Check, Lightbulb, Printer, Settings as SettingsIcon, MessageCircle, Mail, X, Bell, Database, Upload, Pin, PinOff, BarChart2, Sparkles } from 'lucide-react';
+import { Menu, Send, Plus, Search, RefreshCw, Download, FileText, ChevronRight, ShieldAlert, BookOpen, Globe, Briefcase, Calendar, ChevronLeft, Save, Trash2, Check, Lightbulb, Printer, Settings as SettingsIcon, MessageCircle, Mail, X, Bell, Database, Upload, Pin, PinOff, BarChart2, Sparkles, Copy, Lock, ShieldCheck, Fingerprint, ExternalLink, SendHorizonal, BrainCircuit, TrendingUp, History } from 'lucide-react';
 import Navigation from './components/Navigation';
 import MarkdownRenderer from './components/MarkdownRenderer';
 import ShareButton from './components/ShareButton';
 import IncidentChart from './components/IncidentChart';
 import { View, ChatMessage, Template, SecurityRole, StoredReport, WeeklyTip, UserProfile, KnowledgeDocument } from './types';
 import { STATIC_TEMPLATES } from './constants';
-import { generateAdvisorResponse, generateTrainingModule, analyzeReport, fetchBestPractices, generateWeeklyInsights, generateWeeklyTip, getTrainingSuggestions } from './services/geminiService';
+import { generateAdvisorResponseStream, generateTrainingModule, analyzeReport, fetchBestPractices, generateWeeklyTip, generateOperationalInsights } from './services/geminiService';
+
+const AntiRiskLogo = ({ className = "w-24 h-24", light = false }: { className?: string; light?: boolean }) => (
+  <svg viewBox="0 0 100 100" className={className} xmlns="http://www.w3.org/2000/svg">
+    <path d="M50 5 L95 85 L5 85 Z" fill={light ? "#1e293b" : "#000000"} />
+    <path d="M50 15 L85 80 L15 80 Z" fill={light ? "#334155" : "#000000"} />
+    <path d="M5 L85 L25 85 L15 65 Z" fill="#dc2626" />
+    <path d="M95 85 L75 85 L85 65 Z" fill="#dc2626" />
+    <circle cx="50" cy="55" r="30" fill="white" />
+    <text x="50" y="68" fontFamily="Arial, sans-serif" fontSize="38" fontWeight="bold" fill="black" textAnchor="middle">AR</text>
+    <rect x="0" y="85" width="100" height="15" fill={light ? "#000000" : "black"} />
+    <text x="50" y="96" fontFamily="Arial, sans-serif" fontSize="8" fontWeight="bold" fill="white" textAnchor="middle">ANTI-RISK SECURITY</text>
+  </svg>
+);
 
 function App() {
+  const [appState, setAppState] = useState<'SPLASH' | 'PIN_ENTRY' | 'PIN_SETUP' | 'READY'>('SPLASH');
+  const [pinInput, setPinInput] = useState('');
+  const [setupStep, setSetupStep] = useState(1);
+  const [tempPin, setTempPin] = useState('');
+  const [isPinError, setIsPinError] = useState(false);
+  const [splashProgress, setSplashProgress] = useState(0);
+  const [storedPin, setStoredPin] = useState<string | null>(() => localStorage.getItem('security_app_vault_pin'));
+
   const [currentView, setCurrentView] = useState<View>(View.DASHBOARD);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [showNewTipAlert, setShowNewTipAlert] = useState<WeeklyTip | null>(null);
-  const [settingsSaved, setSettingsSaved] = useState(false);
 
-  // --- User Profile State ---
   const [userProfile, setUserProfile] = useState<UserProfile>(() => {
     const saved = localStorage.getItem('security_app_profile');
-    return saved ? JSON.parse(saved) : { name: '', phoneNumber: '', email: '' };
+    return saved ? JSON.parse(saved) : { name: 'Executive Director', phoneNumber: '', email: '' };
   });
 
-  // --- Advisor State ---
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
     const saved = localStorage.getItem('security_app_chat');
     return saved ? JSON.parse(saved) : [{
       id: 'welcome',
       role: 'model',
-      text: "Hello. I am the AntiRisk Executive Advisor. I am ready to assist with operations, liability reduction, and strategic planning.",
+      text: "Welcome, Director. I am the AntiRisk Strategy Unit. Our protocols are currently aligned with ISO 18788 and Nigerian private security regulations. How can I assist with your operational oversight today?",
       timestamp: Date.now(),
       isPinned: false
     }];
   });
-  const [inputMessage, setInputMessage] = useState('');
-  const [isAdvisorThinking, setIsAdvisorThinking] = useState(false);
-  const [showPinnedOnly, setShowPinnedOnly] = useState(false);
-  const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // --- Knowledge Base State ---
-  const [knowledgeBase, setKnowledgeBase] = useState<KnowledgeDocument[]>(() => {
-    const saved = localStorage.getItem('security_app_kb');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [showKbModal, setShowKbModal] = useState(false);
-  const [newDocTitle, setNewDocTitle] = useState('');
-  const [newDocContent, setNewDocContent] = useState('');
-
-  // --- Training State ---
-  const [trainingRole, setTrainingRole] = useState<string>(SecurityRole.GUARD);
-  const [trainingTopic, setTrainingTopic] = useState('');
-  const [trainingContent, setTrainingContent] = useState('');
-  const [isTrainingLoading, setIsTrainingLoading] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
-  const [suggestedTopics, setSuggestedTopics] = useState<string[]>([]);
-  const [isSuggestingTopics, setIsSuggestingTopics] = useState(false);
-
-  // --- Report Analyzer State ---
-  const [reportText, setReportText] = useState('');
-  const [analysisResult, setAnalysisResult] = useState('');
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [storedReports, setStoredReports] = useState<StoredReport[]>(() => {
     const saved = localStorage.getItem('security_app_reports');
     return saved ? JSON.parse(saved) : [];
   });
-  const [analyzerTab, setAnalyzerTab] = useState<'DAILY' | 'WEEKLY'>('DAILY');
-  const [weeklyInsight, setWeeklyInsight] = useState('');
-  const [isWeeklyLoading, setIsWeeklyLoading] = useState(false);
 
-  // --- Best Practices State ---
-  const [bpTopic, setBpTopic] = useState('Current Global Security Trends for Manpower Services');
-  const [bpContent, setBpContent] = useState<{ text: string, sources?: any[] } | null>(null);
-  const [isBpLoading, setIsBpLoading] = useState(false);
-  const [hasAutoFetchedBp, setHasAutoFetchedBp] = useState(false);
-  // Notification State for Best Practices
-  const [bpBadgeCount, setBpBadgeCount] = useState(0);
-  const [showBpToast, setShowBpToast] = useState(false);
-
-  // --- Toolkit/Templates State ---
-  const [customTemplates, setCustomTemplates] = useState<Template[]>(() => {
-    const saved = localStorage.getItem('security_app_templates');
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  // --- Weekly Tips State ---
   const [weeklyTips, setWeeklyTips] = useState<WeeklyTip[]>(() => {
     const saved = localStorage.getItem('security_app_weekly_tips');
     return saved ? JSON.parse(saved) : [];
   });
+
+  const [knowledgeBase, setKnowledgeBase] = useState<KnowledgeDocument[]>(() => {
+    const saved = localStorage.getItem('security_app_kb');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [inputMessage, setInputMessage] = useState('');
+  const [isAdvisorThinking, setIsAdvisorThinking] = useState(false);
+  const [showKbModal, setShowKbModal] = useState(false);
+  const [newDocTitle, setNewDocTitle] = useState('');
+  const [newDocContent, setNewDocContent] = useState('');
+  const [reportText, setReportText] = useState('');
+  const [analysisResult, setAnalysisResult] = useState('');
+  const [operationalInsights, setOperationalInsights] = useState<string>(() => localStorage.getItem('security_app_insights') || '');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isGeneratingInsights, setIsGeneratingInsights] = useState(false);
   const [isTipLoading, setIsTipLoading] = useState(false);
-  const [customTipTopic, setCustomTipTopic] = useState('');
-  const [hasCheckedWeeklyTip, setHasCheckedWeeklyTip] = useState(false);
 
-  // --- Effects ---
+  const [bpSearchQuery, setBpSearchQuery] = useState('');
+  const [isBpLoading, setIsBpLoading] = useState(false);
+  const [bpResult, setBpResult] = useState<{ text: string, sources?: any[] } | null>(null);
+
+  const [trainingRole, setTrainingRole] = useState<string>(SecurityRole.GUARD);
+  const [trainingTopic, setTrainingTopic] = useState('');
+  const [trainingContent, setTrainingContent] = useState('');
+  const [isTrainingLoading, setIsTrainingLoading] = useState(false);
+
+  // Auto-Dispatch States
+  const [showDispatchOverlay, setShowDispatchOverlay] = useState(false);
+  const [pendingDispatchTip, setPendingDispatchTip] = useState<WeeklyTip | null>(null);
+
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { localStorage.setItem('security_app_profile', JSON.stringify(userProfile)); }, [userProfile]);
+  useEffect(() => { localStorage.setItem('security_app_chat', JSON.stringify(messages)); chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
+  useEffect(() => { localStorage.setItem('security_app_reports', JSON.stringify(storedReports)); }, [storedReports]);
+  useEffect(() => { localStorage.setItem('security_app_weekly_tips', JSON.stringify(weeklyTips)); }, [weeklyTips]);
+  useEffect(() => { localStorage.setItem('security_app_kb', JSON.stringify(knowledgeBase)); }, [knowledgeBase]);
+  useEffect(() => { localStorage.setItem('security_app_insights', operationalInsights); }, [operationalInsights]);
+
+  /**
+   * Bi-Weekly Automated Check
+   */
   useEffect(() => {
-    localStorage.setItem('security_app_profile', JSON.stringify(userProfile));
-  }, [userProfile]);
-
-  useEffect(() => {
-    localStorage.setItem('security_app_chat', JSON.stringify(messages));
-    if (currentView === View.ADVISOR && !showPinnedOnly) {
-      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [messages, currentView, showPinnedOnly]);
-
-  useEffect(() => {
-    localStorage.setItem('security_app_reports', JSON.stringify(storedReports));
-  }, [storedReports]);
-
-  useEffect(() => {
-    localStorage.setItem('security_app_templates', JSON.stringify(customTemplates));
-  }, [customTemplates]);
-
-  useEffect(() => {
-    localStorage.setItem('security_app_weekly_tips', JSON.stringify(weeklyTips));
-  }, [weeklyTips]);
-
-  useEffect(() => {
-    localStorage.setItem('security_app_kb', JSON.stringify(knowledgeBase));
-  }, [knowledgeBase]);
-
-  // Automatic refresh for Best Practices when entering the view
-  useEffect(() => {
-    if (currentView === View.BEST_PRACTICES) {
-      // Clear badge when viewing
-      setBpBadgeCount(0);
-      
-      if (!hasAutoFetchedBp && !bpContent) {
-        handleFetchBP();
-        setHasAutoFetchedBp(true);
-      }
-    }
-  }, [currentView]);
-
-  // SIMULATION: "Background" update for Best Practices
-  useEffect(() => {
-    // Simulate the AI sourcing new content in the background after app load
-    const timer = setTimeout(() => {
-      if (currentView !== View.BEST_PRACTICES) {
-        setBpBadgeCount(prev => prev + 1);
-        setShowBpToast(true);
-        // Auto-hide toast
-        setTimeout(() => setShowBpToast(false), 5000);
-      }
-    }, 5000); // Triggers 5 seconds after app load for demonstration
-
-    return () => clearTimeout(timer);
-  }, []);
-
-  // Automatic Weekly Tip Generation Check
-  useEffect(() => {
-    if (currentView === View.WEEKLY_TIPS && !hasCheckedWeeklyTip) {
-      const checkAndGenerate = async () => {
-        const latestTip = weeklyTips.length > 0 ? weeklyTips[0] : null;
+    if (appState === 'READY') {
+      const checkBiWeeklyDispatch = async () => {
+        const BI_WEEKLY_MS = 14 * 24 * 60 * 60 * 1000;
         const now = Date.now();
-        const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
-        
-        // Generate if list is empty OR latest tip is older than 7 days
-        if (!latestTip || (now - latestTip.timestamp > sevenDaysMs)) {
-          await handleGenerateWeeklyTip(true);
+        const lastGenerated = weeklyTips.length > 0 ? weeklyTips[0].timestamp : 0;
+
+        if (now - lastGenerated > BI_WEEKLY_MS) {
+          console.log("Bi-weekly intelligence cycle due. Initiating generation...");
+          setIsTipLoading(true);
+          const content = await generateWeeklyTip();
+          const newTip: WeeklyTip = { 
+            id: Date.now().toString(), 
+            timestamp: Date.now(), 
+            weekDate: new Date().toLocaleDateString(), 
+            topic: 'Bi-Weekly Strategy Briefing', 
+            content, 
+            isAutoGenerated: true 
+          };
+          setWeeklyTips(prev => [newTip, ...prev]);
+          setPendingDispatchTip(newTip);
+          setShowDispatchOverlay(true);
+          setIsTipLoading(false);
         }
       };
-      checkAndGenerate();
-      setHasCheckedWeeklyTip(true);
+      checkBiWeeklyDispatch();
     }
-  }, [currentView, weeklyTips, hasCheckedWeeklyTip]);
+  }, [appState]);
 
-  // --- Handlers ---
+  useEffect(() => {
+    if (appState === 'SPLASH') {
+      const startTime = Date.now();
+      const duration = 2000;
+      const timer = setInterval(() => {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min((elapsed / duration) * 100, 100);
+        setSplashProgress(progress);
+        if (progress >= 100) {
+          clearInterval(timer);
+          setAppState(storedPin ? 'PIN_ENTRY' : 'PIN_SETUP');
+        }
+      }, 30);
+      return () => clearInterval(timer);
+    }
+  }, [appState, storedPin]);
+
+  const handlePinDigit = (digit: string) => {
+    if (pinInput.length >= 4) return;
+    const newPin = pinInput + digit;
+    setPinInput(newPin);
+    setIsPinError(false);
+    if (newPin.length === 4) {
+      if (appState === 'PIN_ENTRY') {
+        if (newPin === storedPin) setAppState('READY');
+        else { setIsPinError(true); setTimeout(() => setPinInput(''), 500); }
+      } else {
+        if (setupStep === 1) { setTempPin(newPin); setSetupStep(2); setPinInput(''); }
+        else {
+          if (newPin === tempPin) { localStorage.setItem('security_app_vault_pin', newPin); setStoredPin(newPin); setAppState('READY'); }
+          else { setIsPinError(true); setSetupStep(1); setPinInput(''); alert("Mismatch."); }
+        }
+      }
+    }
+  };
 
   const handleSendMessage = async () => {
     if (!inputMessage.trim()) return;
-
-    const userMsg: ChatMessage = {
-      id: Date.now().toString(),
-      role: 'user',
-      text: inputMessage,
-      timestamp: Date.now(),
-      isPinned: false
-    };
-
+    const userMsg: ChatMessage = { id: Date.now().toString(), role: 'user', text: inputMessage, timestamp: Date.now() };
     setMessages(prev => [...prev, userMsg]);
     setInputMessage('');
     setIsAdvisorThinking(true);
-
-    // Pass knowledge base to advisor service
-    const response = await generateAdvisorResponse(messages, inputMessage, knowledgeBase);
-    
-    const aiMsg: ChatMessage = {
-      id: (Date.now() + 1).toString(),
-      role: 'model',
-      text: response.text,
-      timestamp: Date.now(),
-      sources: response.sources,
-      isPinned: false
-    };
-
-    setMessages(prev => [...prev, aiMsg]);
-    setIsAdvisorThinking(false);
+    const aiMsgId = (Date.now() + 1).toString() + 'ai';
+    let fullAiText = "";
+    setMessages(prev => [...prev, { id: aiMsgId, role: 'model', text: "", timestamp: Date.now() }]);
+    await generateAdvisorResponseStream(messages, inputMessage, knowledgeBase, (chunk) => {
+      setIsAdvisorThinking(false);
+      fullAiText += chunk;
+      setMessages(prev => prev.map(m => m.id === aiMsgId ? { ...m, text: fullAiText } : m));
+    });
   };
 
-  const handleTogglePin = (messageId: string) => {
-    setMessages(prev => prev.map(msg => 
-      msg.id === messageId ? { ...msg, isPinned: !msg.isPinned } : msg
-    ));
+  const handleFetchBP = async (forceQuery?: string) => {
+    const query = forceQuery || bpSearchQuery;
+    if (!query.trim()) return;
+    setIsBpLoading(true);
+    const result = await fetchBestPractices(query);
+    setBpResult(result);
+    setIsBpLoading(false);
   };
 
-  const handleAddKbDocument = () => {
-    if (!newDocTitle.trim() || !newDocContent.trim()) return;
-
-    const newDoc: KnowledgeDocument = {
-      id: Date.now().toString(),
-      title: newDocTitle,
-      content: newDocContent,
-      dateAdded: new Date().toLocaleDateString()
-    };
-
-    setKnowledgeBase(prev => [newDoc, ...prev]);
-    setNewDocTitle('');
-    setNewDocContent('');
-  };
-
-  const handleDeleteKbDocument = (id: string) => {
-    if (window.confirm("Delete this document from the AI's memory?")) {
-      setKnowledgeBase(prev => prev.filter(d => d.id !== id));
-    }
+  const handleDashboardUpdateClick = (topic: string) => {
+    setBpSearchQuery(topic);
+    setCurrentView(View.BEST_PRACTICES);
+    handleFetchBP(topic);
   };
 
   const handleGenerateTraining = async () => {
-    if (!trainingTopic) return;
+    if (!trainingTopic.trim()) return;
     setIsTrainingLoading(true);
     const content = await generateTrainingModule(trainingRole, trainingTopic);
     setTrainingContent(content);
     setIsTrainingLoading(false);
   };
 
-  const handleGetTrainingSuggestions = async () => {
-    setIsSuggestingTopics(true);
-    const topics = await getTrainingSuggestions(storedReports);
-    setSuggestedTopics(topics);
-    setIsSuggestingTopics(false);
-  };
-
-  const handleSaveTemplate = () => {
-    if (!trainingContent || !trainingTopic) return;
-    
-    const newTemplate: Template = {
-      id: Date.now().toString(),
-      title: trainingTopic,
-      description: `Custom Module for ${trainingRole} - Created ${new Date().toLocaleDateString()}`,
-      content: trainingContent
-    };
-
-    setCustomTemplates(prev => [newTemplate, ...prev]);
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 2000);
-  };
-
-  const handleDeleteTemplate = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this template?')) {
-      setCustomTemplates(prev => prev.filter(t => t.id !== id));
-    }
-  };
-
   const handleAnalyzeReport = async () => {
     if (!reportText) return;
     setIsAnalyzing(true);
-    
-    // Pass recent context (last 5 reports) to help AI detect recurrence immediately
-    const contextReports = storedReports.slice(0, 5);
-    const result = await analyzeReport(reportText, contextReports);
+    const result = await analyzeReport(reportText, storedReports);
     setAnalysisResult(result);
-    
-    // Automatically save the report
-    const newReport: StoredReport = {
-      id: Date.now().toString(),
-      timestamp: Date.now(),
-      dateStr: new Date().toLocaleDateString(),
-      content: reportText,
-      analysis: result
-    };
-    setStoredReports(prev => [newReport, ...prev]);
+    setStoredReports(prev => [{ id: Date.now().toString(), timestamp: Date.now(), dateStr: new Date().toLocaleDateString(), content: reportText, analysis: result }, ...prev]);
     setIsAnalyzing(false);
+    setReportText(''); // Clear for next log
   };
 
-  const handleGenerateWeekly = async () => {
-    // Filter for reports from the last 7 days
-    const oneWeekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
-    const weeklyReports = storedReports.filter(r => r.timestamp > oneWeekAgo);
-
-    if (weeklyReports.length === 0) {
-      alert("No reports found from the last 7 days to generate a weekly insight.");
+  const handleGenerateInsights = async () => {
+    if (storedReports.length < 2) {
+      alert("At least 2 reports are required for operational pattern detection.");
       return;
     }
-
-    setIsWeeklyLoading(true);
-    const result = await generateWeeklyInsights(weeklyReports);
-    setWeeklyInsight(result);
-    setIsWeeklyLoading(false);
-  };
-
-  const handleFetchBP = async () => {
-    setIsBpLoading(true);
-    const result = await fetchBestPractices(bpTopic);
-    setBpContent(result);
-    setIsBpLoading(false);
+    setIsGeneratingInsights(true);
+    const insights = await generateOperationalInsights(storedReports);
+    setOperationalInsights(insights);
+    setIsGeneratingInsights(false);
   };
 
   const handleGenerateWeeklyTip = async (isAuto: boolean) => {
     setIsTipLoading(true);
-    const topic = isAuto ? undefined : customTipTopic;
-    const content = await generateWeeklyTip(topic);
-    
-    // Error Guard: Don't save if generation failed
-    if (!content || content.startsWith("Error") || content.startsWith("Failed")) {
-      setIsTipLoading(false);
-      return;
-    }
-
-    // Extract topic from content (Looking for WEEKLY TRAINING TOPIC:)
-    let derivedTopic = "Weekly Security Tip";
-    const topicMatch = content.match(/WEEKLY TRAINING TOPIC:\s*(.*)/);
-    if (topicMatch && topicMatch[1]) {
-      derivedTopic = topicMatch[1].trim();
-    }
-
-    const newTip: WeeklyTip = {
-      id: Date.now().toString(),
-      timestamp: Date.now(),
-      weekDate: new Date().toLocaleDateString(),
-      topic: derivedTopic,
-      content: content,
-      isAutoGenerated: isAuto
-    };
-
+    const content = await generateWeeklyTip();
+    const newTip: WeeklyTip = { id: Date.now().toString(), timestamp: Date.now(), weekDate: new Date().toLocaleDateString(), topic: 'Intelligence Briefing', content, isAutoGenerated: isAuto };
     setWeeklyTips(prev => [newTip, ...prev]);
-    setCustomTipTopic('');
     setIsTipLoading(false);
-
-    // Trigger Notification Flow
-    setShowNewTipAlert(newTip);
   };
 
-  const handleDeleteTip = (id: string) => {
-    if (window.confirm('Remove this training tip from history?')) {
-      setWeeklyTips(prev => prev.filter(t => t.id !== id));
-    }
+  const handleAddKbDocument = () => {
+    if (!newDocTitle.trim() || !newDocContent.trim()) return;
+    const newDoc: KnowledgeDocument = { id: Date.now().toString(), title: newDocTitle, content: newDocContent, dateAdded: new Date().toLocaleDateString() };
+    setKnowledgeBase(prev => [newDoc, ...prev]);
+    setNewDocTitle('');
+    setNewDocContent('');
   };
 
-  // --- Notification / Dispatch Handlers ---
+  const handleRemoveKbDocument = (id: string) => { setKnowledgeBase(prev => prev.filter(doc => doc.id !== id)); };
 
-  const sendToCEO = (type: 'whatsapp' | 'email', tip: WeeklyTip) => {
-    if (!userProfile.phoneNumber && type === 'whatsapp') {
-      setShowNewTipAlert(null); // Close alert to unblock view
-      setShowSettings(true);
-      return;
-    }
-    if (!userProfile.email && type === 'email') {
-      setShowNewTipAlert(null); // Close alert to unblock view
-      setShowSettings(true);
-      return;
-    }
-
-    const alertPrefix = `🔔 *WEEKLY SECURITY TRAINING* 🔔\n\n*Date:* ${tip.weekDate}\n*Topic:* ${tip.topic}\n\n`;
-    
-    if (type === 'whatsapp') {
-      const cleanNumber = userProfile.phoneNumber.replace(/[^0-9]/g, '');
-      
-      // 1. Convert AI Markdown to Professional WhatsApp Format
-      let formattedContent = tip.content
-        // Convert Bold: **text** -> *text*
-        .replace(/\*\*(.*?)\*\*/g, '*$1*')
-        // Convert Headers (lines starting with #) -> *Header* with spacing
-        .replace(/^#+\s*(.*$)/gm, '\n*$1*')
-        // Convert List items (* or -) -> •
-        .replace(/^[\*\-]\s/gm, '• ')
-        // Fix excessive spacing
-        .replace(/\n\n\n+/g, '\n\n')
-        .trim();
-
-      const finalBody = encodeURIComponent(alertPrefix + formattedContent);
-      
-      // 2. Open WhatsApp
-      window.open(`https://wa.me/${cleanNumber}?text=${finalBody}`, '_blank');
+  const triggerDispatch = (type: 'WHATSAPP' | 'EMAIL') => {
+    if (!pendingDispatchTip) return;
+    const { topic, content } = pendingDispatchTip;
+    if (type === 'WHATSAPP') {
+      const text = encodeURIComponent(`*AntiRisk Bi-Weekly Intelligence: ${topic}*\n\n${content}`);
+      const phone = userProfile.phoneNumber.replace(/\D/g, '');
+      window.open(`https://wa.me/${phone}?text=${text}`, '_blank');
     } else {
-      const subject = encodeURIComponent(`Weekly Security Tip: ${tip.topic}`);
-      const body = encodeURIComponent(`A new weekly tip has been generated in the app.\n\n${tip.content}`);
+      const subject = encodeURIComponent(`AntiRisk Intelligence: ${topic}`);
+      const body = encodeURIComponent(content);
       window.open(`mailto:${userProfile.email}?subject=${subject}&body=${body}`, '_blank');
     }
-    
-    // Automatically dismiss the alert modal after sending
-    setShowNewTipAlert(null);
-  };
-
-  const handleSaveSettings = () => {
-    setSettingsSaved(true);
-    // Force storage update explicitly just in case, though effect handles it
-    localStorage.setItem('security_app_profile', JSON.stringify(userProfile));
-    setTimeout(() => {
-      setSettingsSaved(false);
-      setShowSettings(false);
-    }, 800);
-  };
-
-  // --- Render Content Areas ---
-
-  const renderSettingsModal = () => (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-      <div className="bg-slate-800 rounded-2xl border border-slate-700 shadow-2xl w-full max-w-md animate-in fade-in zoom-in duration-300">
-        <div className="p-6 border-b border-slate-700 flex justify-between items-center">
-          <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            <SettingsIcon size={24} className="text-blue-400" />
-            CEO Alert Settings
-          </h2>
-          <button onClick={() => setShowSettings(false)} className="text-slate-400 hover:text-white">
-            <X size={24} />
-          </button>
-        </div>
-        <div className="p-6 space-y-4">
-          <div className="bg-blue-900/30 border border-blue-800 rounded-lg p-3 flex gap-3">
-            <Bell className="text-blue-400 shrink-0" size={20} />
-            <p className="text-sm text-blue-100">Enter your details to receive "New Tip Available" push alerts via WhatsApp and Email.</p>
-          </div>
-          
-          <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Name</label>
-            <input 
-              type="text"
-              value={userProfile.name}
-              onChange={(e) => setUserProfile(prev => ({ ...prev, name: e.target.value }))}
-              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-blue-500 focus:outline-none placeholder-slate-600"
-              placeholder="Your Name"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">WhatsApp Number (with country code)</label>
-            <input 
-              type="tel"
-              value={userProfile.phoneNumber}
-              onChange={(e) => setUserProfile(prev => ({ ...prev, phoneNumber: e.target.value }))}
-              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-blue-500 focus:outline-none placeholder-slate-600"
-              placeholder="e.g. 15551234567"
-            />
-            <p className="text-xs text-slate-500 mt-1">Do not use + or spaces (e.g., for US use 1, for UK use 44)</p>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Email Address</label>
-            <input 
-              type="email"
-              value={userProfile.email}
-              onChange={(e) => setUserProfile(prev => ({ ...prev, email: e.target.value }))}
-              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-blue-500 focus:outline-none placeholder-slate-600"
-              placeholder="ceo@company.com"
-            />
-          </div>
-        </div>
-        <div className="p-6 border-t border-slate-700 flex justify-end">
-          <button 
-            onClick={handleSaveSettings}
-            className={`px-6 py-2 rounded-lg font-bold transition-all flex items-center gap-2 ${
-              settingsSaved 
-              ? 'bg-green-600 text-white' 
-              : 'bg-blue-600 hover:bg-blue-700 text-white'
-            }`}
-          >
-            {settingsSaved ? (
-              <>
-                <Check size={18} /> Saved!
-              </>
-            ) : (
-              'Save Profile'
-            )}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderKbModal = () => (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-      <div className="bg-slate-900 rounded-2xl border border-slate-700 shadow-2xl w-full max-w-2xl animate-in fade-in zoom-in duration-300 flex flex-col max-h-[85vh]">
-        <div className="p-6 border-b border-slate-800 flex justify-between items-center">
-          <div>
-             <h2 className="text-xl font-bold text-white flex items-center gap-2">
-               <Database size={24} className="text-emerald-400" />
-               AI Knowledge Base Manager
-             </h2>
-             <p className="text-sm text-slate-400">Upload policies, reports, or memos. The Advisor will use this knowledge.</p>
-          </div>
-          <button onClick={() => setShowKbModal(false)} className="text-slate-400 hover:text-white">
-            <X size={24} />
-          </button>
-        </div>
-        
-        <div className="p-6 overflow-y-auto flex-1 space-y-6">
-           {/* Add New Section */}
-           <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
-             <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
-               <Upload size={16} className="text-blue-400" />
-               Add New Document
-             </h3>
-             <div className="space-y-3">
-               <input 
-                 type="text"
-                 value={newDocTitle}
-                 onChange={(e) => setNewDocTitle(e.target.value)}
-                 placeholder="Document Title (e.g., Visitation Policy 2024)"
-                 className="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:border-blue-500 focus:outline-none"
-               />
-               <textarea 
-                 value={newDocContent}
-                 onChange={(e) => setNewDocContent(e.target.value)}
-                 placeholder="Paste full text content here..."
-                 className="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:border-blue-500 focus:outline-none h-32 resize-none font-mono"
-               />
-               <div className="flex justify-end">
-                 <button 
-                   onClick={handleAddKbDocument}
-                   disabled={!newDocTitle || !newDocContent}
-                   className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-2"
-                 >
-                   <Plus size={16} /> Add to Memory
-                 </button>
-               </div>
-             </div>
-           </div>
-
-           {/* List Section */}
-           <div>
-             <h3 className="text-sm font-bold text-slate-400 uppercase mb-3">Stored Documents ({knowledgeBase.length})</h3>
-             <div className="space-y-2">
-               {knowledgeBase.length === 0 && <p className="text-slate-600 text-sm italic text-center py-4">No documents stored. The AI is using generic knowledge only.</p>}
-               {knowledgeBase.map(doc => (
-                 <div key={doc.id} className="bg-slate-800/50 border border-slate-700 hover:border-slate-500 rounded-lg p-3 flex justify-between items-start group transition-colors">
-                   <div>
-                     <h4 className="text-white font-medium text-sm">{doc.title}</h4>
-                     <p className="text-xs text-slate-500 mt-1 line-clamp-1">{doc.content.substring(0, 60)}...</p>
-                     <span className="text-[10px] text-slate-600 mt-1 block">Added: {doc.dateAdded}</span>
-                   </div>
-                   <button 
-                     onClick={() => handleDeleteKbDocument(doc.id)}
-                     className="text-slate-600 hover:text-red-400 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                     title="Delete Document"
-                   >
-                     <Trash2 size={16} />
-                   </button>
-                 </div>
-               ))}
-             </div>
-           </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderNewTipAlertModal = () => {
-    if (!showNewTipAlert) return null;
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-        <div className="bg-slate-900 rounded-2xl border border-yellow-500/50 shadow-2xl w-full max-w-md animate-in fade-in zoom-in duration-300 overflow-hidden">
-          <div className="bg-gradient-to-r from-yellow-600 to-yellow-700 p-6 text-center">
-             <div className="bg-white/20 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 backdrop-blur-md">
-                <Bell size={32} className="text-white animate-bounce" />
-             </div>
-             <h2 className="text-2xl font-bold text-white">New Weekly Tip Generated!</h2>
-             <p className="text-yellow-100 text-sm mt-2">Topic: {showNewTipAlert.topic}</p>
-          </div>
-          <div className="p-6 space-y-4">
-            <p className="text-slate-300 text-center mb-2">
-              The new training module is ready. Send the alert to your device now?
-            </p>
-            
-            <button 
-              onClick={() => sendToCEO('whatsapp', showNewTipAlert)}
-              className="w-full flex items-center justify-center gap-3 bg-green-600 hover:bg-green-700 text-white py-4 rounded-xl font-bold text-lg shadow-lg transition-colors"
-            >
-              <MessageCircle size={24} />
-              Send WhatsApp Alert
-            </button>
-            
-            <button 
-              onClick={() => sendToCEO('email', showNewTipAlert)}
-              className="w-full flex items-center justify-center gap-3 bg-slate-700 hover:bg-slate-600 text-white py-3 rounded-xl font-medium transition-colors"
-            >
-              <Mail size={20} />
-              Send Email Alert
-            </button>
-
-            <button 
-              onClick={() => setShowNewTipAlert(null)}
-              className="w-full text-slate-500 text-sm hover:text-white py-2 transition-colors"
-            >
-              Dismiss (View in App)
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const renderToast = () => {
-    if (!showBpToast) return null;
-    return (
-      <div className="fixed bottom-4 right-4 z-50 bg-slate-800 border-l-4 border-blue-500 text-white px-6 py-4 rounded-lg shadow-2xl animate-in slide-in-from-right duration-300 flex items-center gap-4">
-        <div className="bg-blue-900/50 p-2 rounded-full">
-          <Globe size={20} className="text-blue-400" />
-        </div>
-        <div>
-          <h4 className="font-bold text-sm">Best Practices Updated</h4>
-          <p className="text-xs text-slate-400">New global standards have been sourced.</p>
-        </div>
-        <button 
-          onClick={() => {
-            setShowBpToast(false);
-            setCurrentView(View.BEST_PRACTICES);
-          }}
-          className="ml-2 text-sm text-blue-400 hover:text-white font-bold"
-        >
-          VIEW
-        </button>
-      </div>
-    );
   };
 
   const renderDashboard = () => (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {/* Welcome Card */}
-        <div className="col-span-1 md:col-span-2 bg-gradient-to-br from-blue-900 to-slate-900 border border-blue-800 rounded-2xl p-6 shadow-lg text-white relative overflow-hidden">
-          <div className="relative z-10">
-            <h2 className="text-2xl font-bold mb-2">Welcome, {userProfile.name || 'CEO'}</h2>
-            <p className="text-blue-100 mb-4 max-w-lg">Your executive dashboard is active. Global threat levels are being monitored. Recent analysis suggests reviewing patrol protocols this week.</p>
-            <div className="flex gap-3">
-              <button 
-                onClick={() => setCurrentView(View.ADVISOR)}
-                className="bg-white text-blue-900 px-4 py-2 rounded-lg font-semibold text-sm hover:bg-blue-50 transition-colors"
-              >
-                Consult Advisor
-              </button>
-              <button 
-                onClick={() => setCurrentView(View.REPORT_ANALYZER)}
-                className="bg-blue-800 border border-blue-600 text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-blue-700 transition-colors"
-              >
-                Analyze Reports
-              </button>
-            </div>
-          </div>
-          <div className="absolute right-0 bottom-0 opacity-10 transform translate-y-4 translate-x-4">
-             <ShieldAlert size={200} />
-          </div>
+    <div className="space-y-8 max-w-2xl mx-auto pb-24 animate-in fade-in duration-500">
+      <div className="bg-gradient-to-br from-[#1e40af] to-[#1e1b4b] border border-blue-500/20 rounded-[2.5rem] p-10 text-white shadow-2xl relative overflow-hidden group">
+        <div className="absolute right-[-20px] bottom-[-20px] opacity-10 group-hover:scale-110 transition-transform duration-700 pointer-events-none">
+          <ShieldCheck size={280} strokeWidth={1} />
         </div>
-
-        {/* Quick Action: Weekly Tips */}
-        <div 
-          onClick={() => setCurrentView(View.WEEKLY_TIPS)}
-          className="bg-slate-800 hover:bg-slate-750 border border-slate-700 rounded-2xl p-6 cursor-pointer transition-all hover:border-yellow-500/50 group relative overflow-hidden"
-        >
-          <div className="relative z-10">
-            <div className="w-12 h-12 bg-yellow-500/10 rounded-xl flex items-center justify-center mb-4 group-hover:bg-yellow-500/20 transition-colors">
-              <Lightbulb size={24} className="text-yellow-400" />
-            </div>
-            <h3 className="font-bold text-white mb-1">Weekly Training</h3>
-            <p className="text-sm text-slate-400">View or generate this week's team focus.</p>
+        <div className="relative z-10">
+          <h2 className="text-4xl font-bold mb-4 tracking-tight">Welcome, CEO</h2>
+          <p className="text-blue-100/80 text-lg mb-10 leading-relaxed max-w-md">
+            Your executive dashboard is active. Global threat levels are being monitored. 
+            Recent analysis suggests reviewing patrol protocols this week.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4">
+            <button onClick={() => setCurrentView(View.ADVISOR)} className="flex-1 bg-white text-[#1e1b4b] py-4 rounded-2xl font-bold text-lg hover:bg-slate-100 active:scale-95 transition-all shadow-xl">
+              Consult Advisor
+            </button>
+            <button onClick={() => setCurrentView(View.REPORT_ANALYZER)} className="flex-1 bg-[#2563eb] text-white py-4 rounded-2xl font-bold text-lg hover:bg-blue-700 active:scale-95 transition-all shadow-xl border border-blue-400/30">
+              Analyze Reports
+            </button>
           </div>
         </div>
       </div>
-      
-      {/* Recent Activity Mockup */}
-      <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6">
-        <h3 className="font-bold text-white mb-4 flex items-center gap-2">
-          <RefreshCw size={18} className="text-blue-400" />
-          System Updates
-        </h3>
-        <div className="space-y-4">
-          <div className="flex items-start gap-4 pb-4 border-b border-slate-700/50 last:border-0">
-            <div className="w-2 h-2 mt-2 rounded-full bg-blue-500 shrink-0"></div>
+
+      <div onClick={() => setCurrentView(View.WEEKLY_TIPS)} className="bg-[#1a2232] border border-slate-700/40 rounded-[2rem] p-8 cursor-pointer hover:bg-[#202b3f] transition-all group shadow-xl flex items-center gap-8">
+        <div className="w-20 h-20 bg-yellow-500/10 rounded-3xl flex items-center justify-center group-hover:scale-110 transition-transform">
+          <Lightbulb className="text-yellow-500" size={36} strokeWidth={2.5} />
+        </div>
+        <div>
+          <h3 className="text-2xl font-bold text-white mb-2">Weekly Training</h3>
+          <p className="text-slate-400 text-lg">View or generate this week's team focus.</p>
+        </div>
+      </div>
+
+      <div className="bg-[#1a2232] border border-slate-700/40 rounded-[2rem] p-8 shadow-xl">
+        <div className="flex items-center gap-4 mb-8">
+          <RefreshCw className="text-blue-400" size={24} />
+          <h3 className="text-xl font-bold text-white tracking-wide">System Updates</h3>
+        </div>
+        <div className="space-y-8">
+          <div onClick={() => handleDashboardUpdateClick('Drone Defense in Private Sectors')} className="flex items-start gap-5 cursor-pointer group">
+            <div className="mt-2 w-2.5 h-2.5 rounded-full bg-blue-500 shadow-[0_0_10px_#3b82f6]" />
             <div>
-              <p className="text-sm text-slate-300">Global Best Practices updated: "Drone Defense in Private Sectors".</p>
-              <span className="text-xs text-slate-500">2 hours ago</span>
+              <p className="text-lg font-medium text-slate-200 leading-snug">Global Best Practices updated: "Drone Defense in Private Sectors".</p>
+              <span className="text-sm font-bold text-slate-600 mt-2 block uppercase tracking-widest">2 hours ago</span>
             </div>
           </div>
-          {storedReports.length > 0 && (
-            <div className="flex items-start gap-4 pb-4 border-b border-slate-700/50 last:border-0">
-              <div className="w-2 h-2 mt-2 rounded-full bg-emerald-500 shrink-0"></div>
-              <div>
-                <p className="text-sm text-slate-300">{storedReports.length} Incident Reports stored for Weekly Analysis.</p>
-                <span className="text-xs text-slate-500">Ongoing</span>
-              </div>
-            </div>
-          )}
-          {weeklyTips.length > 0 && (
-             <div className="flex items-start gap-4 pb-4 border-b border-slate-700/50 last:border-0">
-               <div className="w-2 h-2 mt-2 rounded-full bg-yellow-500 shrink-0"></div>
-               <div>
-                 <p className="text-sm text-slate-300">Latest Weekly Tip: "{weeklyTips[0].topic}" generated.</p>
-                 <span className="text-xs text-slate-500">{weeklyTips[0].weekDate}</span>
-               </div>
-             </div>
-          )}
         </div>
       </div>
     </div>
   );
 
-  const renderAdvisor = () => {
-    const filteredMessages = showPinnedOnly ? messages.filter(m => m.isPinned) : messages;
-
-    return (
-      <div className="flex flex-col h-[calc(100vh-8rem)] bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden animate-in fade-in duration-500">
-        {/* Advisor Header with KB Button */}
-        <div className="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-800/50">
-          <div className="flex items-center gap-2">
-            <ShieldAlert className="text-blue-400" size={20} />
-            <h2 className="font-bold text-white">Executive Advisor</h2>
+  const renderBestPractices = () => (
+    <div className="max-w-5xl mx-auto space-y-10 pb-24 animate-in fade-in duration-500">
+      <div className="bg-[#1b2537] rounded-[2.5rem] p-10 border border-slate-700/50 shadow-2xl">
+        <div className="flex items-center gap-6 mb-10">
+          <div className="w-20 h-20 bg-blue-500/10 rounded-3xl flex items-center justify-center text-blue-500">
+            <Globe size={40} />
           </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setShowPinnedOnly(!showPinnedOnly)}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
-                showPinnedOnly 
-                ? 'bg-yellow-600 text-white border-yellow-500' 
-                : 'bg-slate-700 text-slate-200 border-slate-600 hover:bg-slate-600'
-              }`}
-            >
-              {showPinnedOnly ? <PinOff size={14} /> : <Pin size={14} />}
-              {showPinnedOnly ? 'Show All' : 'Show Pinned'}
-            </button>
-            <button 
-              onClick={() => setShowKbModal(true)}
-              className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-slate-200 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border border-slate-600"
-            >
-              <Database size={14} className="text-emerald-400" />
-              Knowledge Base ({knowledgeBase.length})
-            </button>
+          <div>
+            <h2 className="text-4xl font-black text-white tracking-tight">Intelligence Hub</h2>
+            <p className="text-slate-400 text-lg">Real-time global standards and regulatory grounding.</p>
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-hide">
-          {showPinnedOnly && filteredMessages.length === 0 && (
-            <div className="h-full flex flex-col items-center justify-center text-slate-500">
-              <Pin size={48} className="mb-4 opacity-20" />
-              <p>No pinned messages found.</p>
-            </div>
-          )}
+        <div className="flex gap-4">
+          <input 
+            value={bpSearchQuery} 
+            onChange={(e) => setBpSearchQuery(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleFetchBP()}
+            placeholder="Search ISO standards, regional laws, or tactical updates..." 
+            className="flex-1 bg-slate-950/50 border border-slate-700 rounded-2xl px-8 py-5 text-white outline-none focus:border-blue-500 transition-all text-lg shadow-inner"
+          />
+          <button 
+            onClick={() => handleFetchBP()}
+            disabled={isBpLoading || !bpSearchQuery.trim()}
+            className="bg-[#2962ff] hover:bg-blue-700 p-5 rounded-2xl text-white shadow-xl active:scale-95 disabled:opacity-50"
+          >
+            {isBpLoading ? <RefreshCw className="animate-spin" /> : <Search size={28} />}
+          </button>
+        </div>
+      </div>
 
-          {filteredMessages.map((msg) => (
-            <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[85%] rounded-2xl p-4 relative group ${
-                msg.role === 'user' 
-                  ? 'bg-blue-600 text-white rounded-br-sm' 
-                  : 'bg-slate-700 text-slate-100 rounded-bl-sm'
-              } ${msg.isPinned ? 'border-2 border-yellow-500/50 shadow-[0_0_15px_rgba(234,179,8,0.1)]' : ''}`}>
-                
-                <button
-                  onClick={() => handleTogglePin(msg.id)}
-                  className={`absolute top-2 right-2 p-1 rounded-full transition-all ${
-                    msg.isPinned 
-                      ? 'text-yellow-400 opacity-100 bg-black/20' 
-                      : 'text-slate-400 opacity-0 group-hover:opacity-100 hover:text-white hover:bg-black/20'
-                  }`}
-                  title={msg.isPinned ? "Unpin Message" : "Pin Message"}
+      {isBpLoading ? (
+        <div className="flex flex-col items-center justify-center py-24 space-y-4">
+          <RefreshCw className="animate-spin text-blue-500" size={48} />
+          <p className="text-slate-400 font-bold uppercase tracking-widest text-sm">Synthesizing Global Grounding Data...</p>
+        </div>
+      ) : bpResult && (
+        <div className="grid lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2 bg-[#1b2537] rounded-[2.5rem] p-10 border border-white/5 shadow-2xl">
+            <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-3">
+              <ShieldCheck size={24} className="text-blue-500" />
+              Strategic Briefing
+            </h3>
+            <MarkdownRenderer content={bpResult.text} />
+          </div>
+          <div className="bg-[#1b2537] rounded-[2.5rem] p-8 border border-white/5 shadow-2xl h-fit">
+            <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-3">
+              <Database size={20} className="text-emerald-500" />
+              Intelligence Sources
+            </h3>
+            <div className="space-y-4">
+              {bpResult.sources && bpResult.sources.length > 0 ? bpResult.sources.map((source, i) => (
+                <a 
+                  key={i} 
+                  href={source.url} 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="block p-4 bg-slate-900/40 border border-slate-800 rounded-xl hover:border-blue-500/50 transition-colors group"
                 >
-                  <Pin size={14} fill={msg.isPinned ? "currentColor" : "none"} />
-                </button>
-
-                <div className={msg.isPinned ? "pr-6" : ""}>
-                  <MarkdownRenderer content={msg.text} />
-                  {msg.sources && msg.sources.length > 0 && (
-                    <div className="mt-3 pt-3 border-t border-slate-600/50">
-                      <p className="text-xs text-slate-400 font-semibold mb-1">Sources:</p>
-                      <ul className="space-y-1">
-                        {msg.sources.map((s, i) => (
-                          <li key={i}><a href={s.url} target="_blank" rel="noreferrer" className="text-xs text-blue-300 hover:underline truncate block max-w-xs">{s.title}</a></li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
+                  <p className="text-sm font-bold text-slate-200 line-clamp-2 mb-1 group-hover:text-blue-400">{source.title}</p>
+                  <div className="flex items-center gap-2 text-[10px] text-slate-500 font-black uppercase tracking-widest">
+                    <ExternalLink size={10} /> Validated Source
+                  </div>
+                </a>
+              )) : (
+                <div className="p-6 border border-dashed border-slate-700 rounded-2xl text-center">
+                   <p className="text-slate-500 italic text-sm">Grounding data generated from direct model knowledge.</p>
                 </div>
-              </div>
+              )}
             </div>
-          ))}
-          {isAdvisorThinking && (
-            <div className="flex justify-start">
-              <div className="bg-slate-700 rounded-2xl p-4 rounded-bl-sm flex items-center gap-2">
-                <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"></div>
-                <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce delay-100"></div>
-                <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce delay-200"></div>
-              </div>
-            </div>
-          )}
-          <div ref={chatEndRef} />
-        </div>
-        <div className="p-4 bg-slate-800 border-t border-slate-700">
-          <div className="flex gap-2">
-            <input 
-              type="text"
-              value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-              placeholder="Ask about strategy, operations, or incidents..."
-              className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
-            />
-            <button 
-              onClick={handleSendMessage}
-              disabled={!inputMessage.trim() || isAdvisorThinking}
-              className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white p-3 rounded-xl transition-colors"
-            >
-              <Send size={20} />
-            </button>
           </div>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderTrainingBuilder = () => (
+    <div className="max-w-4xl mx-auto space-y-8 pb-24 animate-in slide-in-from-bottom-6 duration-500">
+      <div className="bg-[#1b2537] p-10 rounded-[2.5rem] border border-slate-700/50 shadow-2xl">
+        <h2 className="text-3xl font-black text-white mb-8 flex items-center gap-4">
+          <BookOpen size={32} className="text-blue-500" />
+          Tactical Module Builder
+        </h2>
+        
+        <div className="grid sm:grid-cols-2 gap-6 mb-8">
+          <div className="space-y-3">
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-2">Target Audience</label>
+            <select 
+              value={trainingRole} 
+              onChange={(e) => setTrainingRole(e.target.value)}
+              className="w-full bg-slate-950/50 border border-slate-700 p-5 rounded-2xl text-white font-bold outline-none focus:border-blue-500"
+            >
+              <option value={SecurityRole.GUARD}>Field Guard Force</option>
+              <option value={SecurityRole.SUPERVISOR}>Site Supervisor</option>
+              <option value={SecurityRole.GEN_SUPERVISOR}>General Supervisor</option>
+            </select>
+          </div>
+          <div className="space-y-3">
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-2">Training Topic</label>
+            <input 
+              value={trainingTopic} 
+              onChange={(e) => setTrainingTopic(e.target.value)}
+              placeholder="e.g. Hostile Recognition at Night..." 
+              className="w-full bg-slate-950/50 border border-slate-700 p-5 rounded-2xl text-white font-bold outline-none focus:border-blue-500"
+            />
+          </div>
+        </div>
+
+        <button 
+          onClick={handleGenerateTraining}
+          disabled={isTrainingLoading || !trainingTopic}
+          className="w-full bg-[#2962ff] hover:bg-blue-700 py-6 rounded-3xl font-black text-xl text-white shadow-xl active:scale-95 disabled:opacity-50 transition-all"
+        >
+          {isTrainingLoading ? <RefreshCw className="animate-spin" /> : "Synthesize Training Module"}
+        </button>
+      </div>
+
+      {trainingContent && (
+        <div className="bg-[#1b2537] p-10 rounded-[3rem] border border-white/5 shadow-2xl">
+          <div className="flex justify-between items-center mb-8">
+            <h3 className="text-2xl font-bold text-white">Generated Syllabus</h3>
+            <ShareButton title={`AntiRisk Training: ${trainingTopic}`} content={trainingContent} />
+          </div>
+          <MarkdownRenderer content={trainingContent} />
+        </div>
+      )}
+    </div>
+  );
+
+  const renderOpsToolkit = () => (
+    <div className="max-w-5xl mx-auto grid md:grid-cols-2 gap-8 pb-24 animate-in fade-in duration-500">
+      {STATIC_TEMPLATES.map(template => (
+        <div key={template.id} className="bg-[#1b2537] p-10 rounded-[2.5rem] border border-white/5 shadow-2xl flex flex-col h-full">
+          <div className="flex items-center gap-4 mb-6">
+            <div className="w-14 h-14 bg-slate-900 rounded-2xl flex items-center justify-center text-blue-400">
+              <Briefcase size={28} />
+            </div>
+            <div>
+              <h3 className="text-2xl font-bold text-white leading-tight">{template.title}</h3>
+              <p className="text-slate-500 text-sm mt-1">{template.description}</p>
+            </div>
+          </div>
+          <div className="flex-1 bg-slate-950/40 border border-slate-800 rounded-2xl p-6 font-mono text-[13px] text-slate-400 overflow-y-auto max-h-48 mb-8">
+            <pre className="whitespace-pre-wrap">{template.content}</pre>
+          </div>
+          <div className="flex gap-4">
+            <button 
+              onClick={() => {
+                navigator.clipboard.writeText(template.content);
+                alert("Copied to clipboard.");
+              }}
+              className="flex-1 flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-white py-4 rounded-xl font-bold transition-all"
+            >
+              <Copy size={18} /> Copy Template
+            </button>
+            <ShareButton title={template.title} content={template.content} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
+  const renderAdvisor = () => (
+    <div className="flex flex-col h-[calc(100vh-10rem)] bg-[#0d1421] rounded-3xl border border-slate-700/50 overflow-hidden shadow-2xl max-w-5xl mx-auto w-full">
+      <div className="p-5 bg-slate-900/40 border-b border-slate-700 flex justify-between items-center px-8">
+        <div className="flex items-center gap-3">
+          <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_#10b981]"></div>
+          <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Strategy Engine Online</span>
+        </div>
+        <button onClick={() => setShowKbModal(true)} className="flex items-center gap-2 px-4 py-2 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 rounded-xl border border-blue-600/20 transition-all text-xs font-black uppercase tracking-wider">
+          <Database size={14} />
+          Knowledge Manager
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-8 space-y-8 scrollbar-hide">
+        {messages.map((msg) => (
+          <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-2 duration-300`}>
+            <div className={`max-w-[85%] rounded-[1.5rem] p-6 ${msg.role === 'user' ? 'bg-[#2962ff] text-white shadow-xl shadow-blue-900/20' : 'bg-[#1a2232] text-slate-100 border border-white/5'}`}>
+              <MarkdownRenderer content={msg.text} />
+              {msg.text === "" && <span className="animate-pulse">|</span>}
+            </div>
+          </div>
+        ))}
+        {isAdvisorThinking && <div className="text-slate-500 italic flex items-center gap-3 ml-2"><RefreshCw size={18} className="animate-spin text-blue-500" /> <span className="text-sm font-medium tracking-wide">Synthesizing...</span></div>}
+        <div ref={chatEndRef} />
+      </div>
+      <div className="p-6 bg-slate-900/40 border-t border-slate-800 flex gap-4 backdrop-blur-xl">
+        <input value={inputMessage} onChange={(e) => setInputMessage(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()} placeholder="Request strategic guidance..." className="flex-1 bg-slate-950/50 border border-slate-700 rounded-2xl px-6 py-4 text-white outline-none focus:border-blue-500 transition-colors shadow-inner" />
+        <button onClick={handleSendMessage} className="bg-[#2962ff] hover:bg-blue-700 p-5 rounded-2xl text-white shadow-xl active:scale-90 transition-all"><Send size={24} /></button>
+      </div>
+    </div>
+  );
+
+  if (appState === 'SPLASH') {
+    return (
+      <div className="fixed inset-0 bg-[#0a0f1a] flex flex-col items-center justify-center p-8 z-[100]">
+        <AntiRiskLogo className="w-32 h-32 mb-10 animate-pulse" light={true} />
+        <div className="w-full max-w-xs h-1.5 bg-slate-800 rounded-full overflow-hidden mb-6">
+          <div className="h-full bg-[#2962ff] transition-all duration-300" style={{ width: `${splashProgress}%` }}></div>
         </div>
       </div>
     );
-  };
+  }
 
-  const renderBestPractices = () => (
-    <div className="space-y-6 max-w-4xl mx-auto animate-in fade-in duration-500">
-      <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700">
-        <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-          <Globe size={24} className="text-blue-400" />
-          Best Practice Engine
-        </h2>
-        <div className="flex gap-2 mb-6">
-          <input 
-            type="text" 
-            value={bpTopic}
-            onChange={(e) => setBpTopic(e.target.value)}
-            className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-blue-500 focus:outline-none"
-            placeholder="e.g., VIP Protection Standards, Warehouse Access Control"
-          />
-          <button 
-            onClick={handleFetchBP}
-            disabled={isBpLoading}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 rounded-lg font-medium transition-colors flex items-center gap-2"
-          >
-            {isBpLoading ? <RefreshCw className="animate-spin" size={18} /> : 'Source'}
-          </button>
+  if (appState === 'PIN_ENTRY' || appState === 'PIN_SETUP') {
+    return (
+      <div className="fixed inset-0 bg-[#0a0f1a] flex flex-col items-center justify-center p-6 z-[100] animate-in fade-in duration-700">
+        <div className="mb-10 text-center">
+          <AntiRiskLogo className="w-20 h-20 mb-8 mx-auto" />
+          <h2 className="text-4xl font-black text-white mb-2 tracking-tighter">{appState === 'PIN_SETUP' ? 'Initialize PIN' : 'Executive Access'}</h2>
         </div>
-
-        {isBpLoading && (
-           <div className="flex flex-col items-center justify-center py-12 text-slate-400">
-             <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-             <p>Sourcing global standards...</p>
-           </div>
-        )}
-
-        {bpContent && !isBpLoading && (
-          <div className="bg-slate-900 rounded-xl p-6 border border-slate-700/50 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="flex justify-between items-start mb-4">
-              <h3 className="text-lg font-bold text-blue-400">Results for: "{bpTopic}"</h3>
-              <ShareButton content={bpContent.text} title={`Security Best Practices: ${bpTopic}`} />
-            </div>
-            <MarkdownRenderer content={bpContent.text} />
-            
-            {bpContent.sources && bpContent.sources.length > 0 && (
-              <div className="mt-6 pt-4 border-t border-slate-800">
-                <h4 className="text-sm font-bold text-slate-500 uppercase mb-2">Reference Sources</h4>
-                <div className="grid gap-2">
-                  {bpContent.sources.map((s, i) => (
-                    <a key={i} href={s.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 transition-colors">
-                      <Globe size={14} />
-                      {s.title}
-                    </a>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-
-  const renderWeeklyTips = () => (
-    <div className="animate-in fade-in duration-500 h-[calc(100vh-8rem)] flex flex-col">
-      {/* Control Bar */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-        <div>
-           <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            <Lightbulb size={24} className="text-yellow-400" />
-            Weekly Training Tips
-          </h2>
-          <p className="text-sm text-slate-400">Automated weekly curriculum for guards and supervisors.</p>
+        <div className="flex gap-8 mb-16">
+          {[...Array(4)].map((_, i) => <div key={i} className={`w-6 h-6 rounded-full border-2 transition-all duration-300 ${pinInput.length > i ? 'bg-[#2962ff] border-[#2962ff]' : 'border-slate-800'}`} />)}
         </div>
-        <div className="flex flex-wrap gap-2 w-full md:w-auto">
-          <input 
-            type="text"
-            value={customTipTopic}
-            onChange={(e) => setCustomTipTopic(e.target.value)}
-            placeholder="Specific Topic (Optional)"
-            className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:border-yellow-500 focus:outline-none w-full md:w-64"
-          />
-          <button
-            onClick={() => handleGenerateWeeklyTip(false)}
-            disabled={isTipLoading || !customTipTopic}
-            className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-          >
-            Create Custom
-          </button>
-          <button
-            onClick={() => handleGenerateWeeklyTip(true)}
-            disabled={isTipLoading}
-            className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 shadow-lg shadow-yellow-900/20"
-          >
-            {isTipLoading ? <RefreshCw className="animate-spin" size={16} /> : <Plus size={16} />}
-            Generate New Week
-          </button>
+        <div className="grid grid-cols-3 gap-8 w-full max-w-xs">
+          {[1,2,3,4,5,6,7,8,9].map(num => <button key={num} onClick={() => handlePinDigit(num.toString())} className="aspect-square bg-slate-900/50 border border-slate-800 rounded-[1.5rem] text-4xl font-black text-white active:scale-90 transition-all">{num}</button>)}
+          <div />
+          <button onClick={() => handlePinDigit('0')} className="aspect-square bg-slate-900/50 border border-slate-800 rounded-[1.5rem] text-4xl font-black text-white active:scale-90 transition-all">0</button>
+          <button onClick={() => setPinInput('')} className="text-red-500 font-black uppercase tracking-[0.1em] text-xs">Reset</button>
         </div>
       </div>
-
-      {/* Settings Warning Banner if Profile Incomplete */}
-      {(!userProfile.phoneNumber || !userProfile.email) && (
-         <div 
-           onClick={() => setShowSettings(true)}
-           className="bg-red-900/30 border border-red-800/50 rounded-lg p-3 mb-4 flex items-center justify-between cursor-pointer hover:bg-red-900/50 transition-colors"
-         >
-           <div className="flex items-center gap-3">
-             <Bell className="text-red-400 animate-pulse" size={20} />
-             <span className="text-sm text-red-200">CEO Alert Profile Incomplete. Configure settings to receive automatic push notifications.</span>
-           </div>
-           <ChevronRight size={16} className="text-red-400" />
-         </div>
-      )}
-
-      {/* Main Content Area */}
-      <div className="flex-1 grid lg:grid-cols-12 gap-6 min-h-0">
-        
-        {/* Left: Current Tip Display */}
-        <div className="lg:col-span-8 flex flex-col bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden relative">
-          {weeklyTips.length > 0 ? (
-            <>
-               {/* Direct Dispatch Banner */}
-               <div className="bg-blue-900/30 border-b border-blue-800/50 p-3 flex flex-col sm:flex-row items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 text-blue-300 text-xs font-bold uppercase tracking-wide">
-                    <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
-                    Ready to Distribute
-                  </div>
-                  <div className="flex gap-2 w-full sm:w-auto">
-                    <button 
-                      onClick={() => sendToCEO('whatsapp', weeklyTips[0])}
-                      className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-3 py-2 rounded-lg transition-colors shadow-lg shadow-green-900/20"
-                    >
-                      <MessageCircle size={16} />
-                      Send to My WhatsApp
-                    </button>
-                    <button 
-                      onClick={() => sendToCEO('email', weeklyTips[0])}
-                      className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold px-3 py-2 rounded-lg transition-colors"
-                    >
-                      <Mail size={14} />
-                      Email Me
-                    </button>
-                  </div>
-               </div>
-
-               <div className="p-4 border-b border-slate-700 bg-slate-800/50 flex justify-between items-center">
-                  <div>
-                    <span className="text-xs font-bold text-yellow-500 uppercase tracking-wider">Current Focus</span>
-                    <h3 className="text-lg font-bold text-white leading-tight mt-1">{weeklyTips[0].topic}</h3>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button 
-                       onClick={() => window.print()}
-                       className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
-                       title="Print / Save as PDF"
-                    >
-                      <Printer size={20} />
-                    </button>
-                    <ShareButton content={weeklyTips[0].content} title={weeklyTips[0].topic} />
-                  </div>
-               </div>
-               <div className="flex-1 overflow-y-auto p-6 scrollbar-hide bg-slate-900/30">
-                 <div className="prose prose-invert max-w-none prose-headings:text-yellow-400 prose-strong:text-white">
-                   <MarkdownRenderer content={weeklyTips[0].content} />
-                 </div>
-               </div>
-            </>
-          ) : (
-            <div className="flex-1 flex flex-col items-center justify-center text-slate-500 p-8 text-center">
-              {isTipLoading ? (
-                <>
-                   <div className="w-12 h-12 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin mb-6"></div>
-                   <h3 className="text-xl font-bold text-white mb-2">Generating Weekly Intelligence...</h3>
-                   <p className="text-slate-400">Analyzing global standards and AntiRisk protocols.</p>
-                </>
-              ) : (
-                <>
-                  <Lightbulb size={64} className="mb-6 text-slate-700" />
-                  <h3 className="text-xl font-bold text-slate-400 mb-2">No Training Tips Generated Yet</h3>
-                  <p className="max-w-md mb-6">Start by generating this week's security focus. The AI will use global standards to create a complete briefing.</p>
-                  <button
-                    onClick={() => handleGenerateWeeklyTip(true)}
-                    className="bg-yellow-600 hover:bg-yellow-700 text-white px-6 py-3 rounded-xl font-bold transition-colors flex items-center gap-2"
-                  >
-                    Start Automation
-                  </button>
-                </>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Right: History Archive */}
-        <div className="lg:col-span-4 flex flex-col bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden">
-          <div className="p-4 border-b border-slate-700">
-            <h3 className="font-bold text-white flex items-center gap-2">
-              <Calendar size={18} className="text-slate-400" />
-              Training Archive
-            </h3>
-          </div>
-          <div className="flex-1 overflow-y-auto p-2 space-y-2 scrollbar-hide">
-            {weeklyTips.length === 0 && !isTipLoading && <p className="text-slate-500 text-sm italic p-4">Past trainings will appear here.</p>}
-            {weeklyTips.map((tip) => (
-              <div key={tip.id} className="group bg-slate-900/50 hover:bg-slate-900 p-3 rounded-xl border border-slate-800 hover:border-yellow-500/30 transition-all cursor-pointer relative">
-                <div onClick={() => {
-                   // Move selected tip to top of array to display it
-                   const newOrder = [tip, ...weeklyTips.filter(t => t.id !== tip.id)];
-                   setWeeklyTips(newOrder);
-                }}>
-                  <div className="flex justify-between items-start mb-1">
-                    <span className="text-xs font-bold text-slate-500">{tip.weekDate}</span>
-                    {tip.isAutoGenerated && <span className="text-[10px] bg-blue-900/50 text-blue-300 px-1.5 py-0.5 rounded">AUTO</span>}
-                  </div>
-                  <h4 className="text-sm font-bold text-slate-200 group-hover:text-yellow-400 line-clamp-1">{tip.topic}</h4>
-                  <p className="text-xs text-slate-500 line-clamp-2 mt-1">{tip.content.substring(0, 80)}...</p>
-                </div>
-                <button 
-                  onClick={(e) => { e.stopPropagation(); handleDeleteTip(tip.id); }}
-                  className="absolute top-2 right-2 p-1.5 text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-
-      </div>
-    </div>
-  );
-
-  const renderTraining = () => (
-    <div className="grid lg:grid-cols-2 gap-6 h-full animate-in fade-in duration-500">
-      <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 h-fit">
-        <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
-          <BookOpen size={24} className="text-emerald-400" />
-          Training Builder
-        </h2>
-        
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-400 mb-1">Target Audience</label>
-            <div className="grid grid-cols-3 gap-2">
-              {Object.values(SecurityRole).map(role => (
-                <button
-                  key={role}
-                  onClick={() => setTrainingRole(role)}
-                  className={`px-2 py-2 rounded-lg text-xs font-medium border transition-all ${
-                    trainingRole === role 
-                    ? 'bg-blue-600 border-blue-500 text-white' 
-                    : 'bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-500'
-                  }`}
-                >
-                  {role}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-400 mb-1">Topic</label>
-            <input 
-              type="text"
-              value={trainingTopic}
-              onChange={(e) => setTrainingTopic(e.target.value)}
-              placeholder="e.g., Radio Discipline, Conflict De-escalation"
-              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-blue-500 focus:outline-none"
-            />
-            
-            <div className="mt-2">
-               {!isSuggestingTopics && suggestedTopics.length === 0 && (
-                 <button 
-                   onClick={handleGetTrainingSuggestions}
-                   className="text-xs flex items-center gap-1 text-blue-400 hover:text-blue-300 transition-colors"
-                 >
-                   <Sparkles size={12} />
-                   Ask AI to suggest topics based on recent incidents
-                 </button>
-               )}
-               
-               {isSuggestingTopics && (
-                 <div className="text-xs text-slate-500 flex items-center gap-2">
-                   <RefreshCw size={12} className="animate-spin" /> Analyzing reports...
-                 </div>
-               )}
-
-               {suggestedTopics.length > 0 && (
-                 <div className="flex flex-wrap gap-2 mt-2">
-                   {suggestedTopics.map((topic, idx) => (
-                     <button
-                       key={idx}
-                       onClick={() => setTrainingTopic(topic)}
-                       className="bg-slate-700 hover:bg-blue-600 hover:text-white text-slate-300 text-[10px] px-2 py-1 rounded-full transition-colors border border-slate-600"
-                     >
-                       {topic}
-                     </button>
-                   ))}
-                 </div>
-               )}
-            </div>
-          </div>
-
-          <button
-            onClick={handleGenerateTraining}
-            disabled={isTrainingLoading || !trainingTopic}
-            className="w-full bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white py-3 rounded-xl font-bold shadow-lg shadow-blue-900/20 transition-all flex items-center justify-center gap-2"
-          >
-            {isTrainingLoading ? (
-              <>
-                <RefreshCw className="animate-spin" size={20} /> Generating...
-              </>
-            ) : (
-              <>
-                <FileText size={20} /> Generate Module
-              </>
-            )}
-          </button>
-        </div>
-      </div>
-
-      <div className="bg-slate-900 p-6 rounded-2xl border border-slate-800 relative h-full min-h-[500px]">
-        {!trainingContent && !isTrainingLoading && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-600">
-            <BookOpen size={48} className="mb-4 opacity-20" />
-            <p>Training content will appear here.</p>
-          </div>
-        )}
-        
-        {isTrainingLoading && (
-           <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400">
-             <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-             <p>Consulting best practices...</p>
-           </div>
-        )}
-
-        {trainingContent && !isTrainingLoading && (
-          <div className="h-full flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="flex justify-between items-center mb-4 pb-4 border-b border-slate-800">
-              <h3 className="font-bold text-slate-200">Preview</h3>
-              <div className="flex gap-2">
-                <button 
-                  onClick={handleSaveTemplate}
-                  disabled={saveSuccess}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all font-medium ${saveSuccess ? 'bg-green-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-white'}`}
-                  title="Save to Toolkit"
-                >
-                  {saveSuccess ? <Check size={16} /> : <Save size={16} />}
-                  {saveSuccess ? 'Saved!' : 'Save as Template'}
-                </button>
-                <ShareButton content={trainingContent} title={`Training: ${trainingTopic}`} />
-              </div>
-            </div>
-            <div className="flex-1 overflow-y-auto scrollbar-hide pr-2">
-              <MarkdownRenderer content={trainingContent} />
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-
-  const renderReportAnalyzer = () => (
-    <div className="flex flex-col h-[calc(100vh-8rem)] animate-in fade-in duration-500">
-      {/* Tabs */}
-      <div className="flex gap-4 mb-4">
-        <button 
-          onClick={() => setAnalyzerTab('DAILY')}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors ${analyzerTab === 'DAILY' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
-        >
-          Daily Incident Entry
-        </button>
-        <button 
-          onClick={() => setAnalyzerTab('WEEKLY')}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors ${analyzerTab === 'WEEKLY' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
-        >
-          Weekly Intelligence Center
-        </button>
-      </div>
-
-      {analyzerTab === 'DAILY' && (
-        <div className="grid lg:grid-cols-2 gap-6 flex-1 min-h-0">
-          {/* Input Area */}
-          <div className="flex flex-col bg-slate-800 rounded-2xl border border-slate-700 p-4">
-            <h3 className="font-bold text-white mb-2 flex items-center gap-2">
-              <FileText size={18} className="text-purple-400" />
-              Paste Incident/Daily Report
-            </h3>
-            <textarea 
-              value={reportText}
-              onChange={(e) => setReportText(e.target.value)}
-              className="flex-1 w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-slate-300 focus:border-purple-500 focus:outline-none resize-none text-sm font-mono"
-              placeholder="Paste text from your guards' PDF or email report here..."
-            />
-            <button 
-              onClick={handleAnalyzeReport}
-              disabled={!reportText || isAnalyzing}
-              className="mt-4 w-full bg-purple-600 hover:bg-purple-700 text-white py-3 rounded-xl font-bold transition-colors flex items-center justify-center gap-2"
-            >
-              {isAnalyzing ? <RefreshCw className="animate-spin" size={20} /> : 'Analyze & Save'}
-            </button>
-          </div>
-
-          {/* Output Area */}
-          <div className="bg-slate-800 rounded-2xl border border-slate-700 p-6 overflow-y-auto scrollbar-hide">
-             {!analysisResult && !isAnalyzing && (
-               <div className="h-full flex flex-col items-center justify-center text-slate-500">
-                 <ShieldAlert size={48} className="mb-4 opacity-20" />
-                 <p>AI analysis results will appear here.</p>
-               </div>
-             )}
-             {isAnalyzing && (
-               <div className="h-full flex flex-col items-center justify-center text-purple-300">
-                  <div className="w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-                  <p>Detecting root causes and recurring patterns...</p>
-               </div>
-             )}
-             {analysisResult && !isAnalyzing && (
-               <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                 <div className="flex justify-between items-center mb-6">
-                   <h3 className="font-bold text-lg text-white">Analysis Report</h3>
-                   <ShareButton content={analysisResult} title="Report Analysis" />
-                 </div>
-                 <MarkdownRenderer content={analysisResult} />
-               </div>
-             )}
-          </div>
-        </div>
-      )}
-
-      {analyzerTab === 'WEEKLY' && (
-        <div className="grid lg:grid-cols-12 gap-6 flex-1 min-h-0">
-          {/* Saved Reports List */}
-          <div className="lg:col-span-4 bg-slate-800 rounded-2xl border border-slate-700 p-4 overflow-y-auto scrollbar-hide">
-            <h3 className="font-bold text-white mb-4 flex items-center gap-2">
-              <Calendar size={18} className="text-purple-400" />
-              Reports (Last 7 Days)
-            </h3>
-            <div className="space-y-3">
-              {storedReports.length === 0 && <p className="text-slate-500 text-sm italic">No reports saved yet. Use the 'Daily' tab to add reports.</p>}
-              {storedReports.map((r) => (
-                <div key={r.id} className="bg-slate-900 p-3 rounded-lg border border-slate-800">
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-xs font-bold text-purple-400">{r.dateStr}</span>
-                  </div>
-                  <p className="text-xs text-slate-400 line-clamp-2">{r.content}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Weekly Strategy Area */}
-          <div className="lg:col-span-8 bg-slate-800 rounded-2xl border border-slate-700 p-6 flex flex-col">
-            <div className="flex justify-between items-center mb-6">
-              <div>
-                <h2 className="text-xl font-bold text-white">Weekly Strategy Generator</h2>
-                <p className="text-sm text-slate-400">Synthesize all reports from the last 7 days into a strategic briefing.</p>
-              </div>
-              <button 
-                onClick={handleGenerateWeekly}
-                disabled={storedReports.length === 0 || isWeeklyLoading}
-                className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white px-6 py-3 rounded-xl font-bold shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                {isWeeklyLoading ? <RefreshCw className="animate-spin" size={20} /> : 'Generate Weekly Insights'}
-              </button>
-            </div>
-
-            {/* Insert Incident Chart Here */}
-            {storedReports.length > 0 && <IncidentChart reports={storedReports} />}
-
-            <div className="flex-1 bg-slate-900 rounded-xl p-6 border border-slate-800 overflow-y-auto scrollbar-hide relative">
-              {!weeklyInsight && !isWeeklyLoading && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-600">
-                  <Briefcase size={48} className="mb-4 opacity-20" />
-                  <p>Click generate to create your weekly CEO briefing.</p>
-                </div>
-              )}
-
-              {isWeeklyLoading && (
-                 <div className="absolute inset-0 flex flex-col items-center justify-center text-purple-400">
-                   <div className="w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-                   <p>Analyzing deep root causes across all reports...</p>
-                 </div>
-              )}
-
-              {weeklyInsight && !isWeeklyLoading && (
-                <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                   <div className="flex justify-end mb-4">
-                     <ShareButton content={weeklyInsight} title="Weekly Security Strategy Briefing" />
-                   </div>
-                   <MarkdownRenderer content={weeklyInsight} />
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-
-  const renderToolkit = () => (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      {customTemplates.length > 0 && (
-        <div className="animate-in slide-in-from-top-4 duration-500">
-          <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-            <Save size={24} className="text-emerald-400" />
-            Saved Custom Templates
-          </h2>
-          <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6">
-            {customTemplates.map((t) => (
-              <div key={t.id} className="bg-slate-800 border border-slate-700 rounded-2xl p-6 hover:border-emerald-500 transition-colors group relative">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="p-3 bg-slate-900 rounded-lg text-emerald-400 group-hover:text-white group-hover:bg-emerald-600 transition-colors">
-                    <Briefcase size={24} />
-                  </div>
-                  <div className="flex gap-2">
-                    <ShareButton content={t.content} title={t.title} />
-                    <button 
-                      onClick={() => handleDeleteTemplate(t.id)}
-                      className="p-2 bg-slate-900 hover:bg-red-900/50 text-slate-400 hover:text-red-400 rounded-lg transition-colors"
-                      title="Delete Template"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </div>
-                <h3 className="text-lg font-bold text-white mb-2">{t.title}</h3>
-                <p className="text-sm text-slate-400 mb-6">{t.description}</p>
-                
-                <div className="bg-slate-900 p-4 rounded-lg border border-slate-800 max-h-40 overflow-y-hidden relative">
-                  <pre className="text-xs text-slate-500 font-mono whitespace-pre-wrap">{t.content}</pre>
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-900 to-transparent"></div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div>
-        <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-          <Briefcase size={24} className="text-blue-400" />
-          Standard Operating Procedures (Global)
-        </h2>
-        <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {STATIC_TEMPLATES.map((t) => (
-            <div key={t.id} className="bg-slate-800 border border-slate-700 rounded-2xl p-6 hover:border-blue-500 transition-colors group">
-              <div className="flex justify-between items-start mb-4">
-                <div className="p-3 bg-slate-900 rounded-lg text-blue-400 group-hover:text-white group-hover:bg-blue-600 transition-colors">
-                  <Briefcase size={24} />
-                </div>
-                <ShareButton content={t.content} title={t.title} />
-              </div>
-              <h3 className="text-lg font-bold text-white mb-2">{t.title}</h3>
-              <p className="text-sm text-slate-400 mb-6">{t.description}</p>
-              
-              <div className="bg-slate-900 p-4 rounded-lg border border-slate-800 max-h-40 overflow-y-hidden relative">
-                <pre className="text-xs text-slate-500 font-mono whitespace-pre-wrap">{t.content}</pre>
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-900 to-transparent"></div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
+    );
+  }
 
   return (
-    <div className="flex min-h-screen bg-slate-900 text-slate-100 font-sans">
-      <Navigation 
-        currentView={currentView} 
-        setView={setCurrentView} 
-        isMobileMenuOpen={isMobileMenuOpen}
-        closeMobileMenu={() => setIsMobileMenuOpen(false)}
-        onOpenSettings={() => setShowSettings(true)}
-        bestPracticesBadge={bpBadgeCount}
-      />
-      
-      <main className="flex-1 flex flex-col h-screen overflow-hidden relative">
-        {/* Mobile Header */}
-        <div className="lg:hidden p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/95 backdrop-blur z-20">
-          <h1 className="font-bold text-lg text-white">AntiRisk Security</h1>
-          <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 text-slate-400 hover:text-white">
-            <Menu size={24} />
-          </button>
+    <div className="flex min-h-screen bg-[#0a0f1a] text-slate-100 selection:bg-blue-600/30">
+      <Navigation currentView={currentView} setView={setCurrentView} isMobileMenuOpen={isMobileMenuOpen} closeMobileMenu={() => setIsMobileMenuOpen(false)} onOpenSettings={() => setShowSettings(true)} />
+      <main className="flex-1 flex flex-col h-screen overflow-hidden">
+        <div className="lg:hidden p-6 border-b border-slate-800/40 flex justify-between items-center bg-[#0d1421]">
+          <div className="flex items-center gap-3">
+            <AntiRiskLogo className="w-10 h-10 rounded-lg" />
+            <h1 className="font-black text-2xl text-white tracking-tighter uppercase">AntiRisk</h1>
+          </div>
+          <button onClick={() => setIsMobileMenuOpen(true)} className="p-3 text-white bg-slate-800/50 rounded-2xl active:scale-90 transition-transform"><Menu size={28} /></button>
         </div>
+        <div className="flex-1 overflow-y-auto p-6 lg:p-12 scrollbar-hide">
+          {currentView === View.DASHBOARD && renderDashboard()}
+          {currentView === View.ADVISOR && renderAdvisor()}
+          {currentView === View.BEST_PRACTICES && renderBestPractices()}
+          {currentView === View.TRAINING && renderTrainingBuilder()}
+          {currentView === View.TOOLKIT && renderOpsToolkit()}
+          
+          {currentView === View.REPORT_ANALYZER && (
+            <div className="max-w-6xl mx-auto space-y-10 pb-20 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="flex flex-col lg:flex-row gap-8 items-start">
+                {/* Left Side: Active Log Upload */}
+                <div className="w-full lg:w-1/3 bg-[#1b2537] p-8 rounded-[2rem] border border-slate-700/50 flex flex-col shadow-2xl sticky top-0">
+                  <div className="flex items-center gap-4 mb-6">
+                    <div className="w-12 h-12 bg-blue-600/10 rounded-xl flex items-center justify-center text-blue-500">
+                      <FileText size={24} />
+                    </div>
+                    <h3 className="text-2xl font-black text-white">Log Upload</h3>
+                  </div>
+                  <p className="text-slate-400 text-sm mb-6">Input daily operational logs for standard AI audit and pattern detection storage.</p>
+                  <textarea 
+                    value={reportText} 
+                    onChange={(e) => setReportText(e.target.value)} 
+                    className="w-full min-h-[200px] bg-slate-950/40 border border-slate-700 rounded-2xl p-6 text-white outline-none resize-none focus:border-blue-500 transition-colors shadow-inner text-sm leading-relaxed mb-6" 
+                    placeholder="Paste field logs here..." 
+                  />
+                  <button 
+                    onClick={handleAnalyzeReport} 
+                    disabled={isAnalyzing || !reportText} 
+                    className="w-full bg-[#2962ff] hover:bg-blue-700 py-4 rounded-2xl font-black text-lg text-white transition-all shadow-xl active:scale-95 disabled:opacity-50 flex items-center justify-center gap-3"
+                  >
+                    {isAnalyzing ? <RefreshCw className="animate-spin" /> : <ShieldCheck size={20} />}
+                    {isAnalyzing ? 'Auditing...' : 'Run Analysis'}
+                  </button>
+                </div>
 
-        {/* Main Content Scroll Area */}
-        <div className="flex-1 overflow-y-auto p-4 lg:p-8 scrollbar-hide">
-          <div className="max-w-7xl mx-auto">
-            {currentView === View.DASHBOARD && renderDashboard()}
-            {currentView === View.ADVISOR && renderAdvisor()}
-            {currentView === View.WEEKLY_TIPS && renderWeeklyTips()}
-            {currentView === View.BEST_PRACTICES && renderBestPractices()}
-            {currentView === View.TRAINING && renderTraining()}
-            {currentView === View.REPORT_ANALYZER && renderReportAnalyzer()}
-            {currentView === View.TOOLKIT && renderToolkit()}
+                {/* Right Side: Analysis Results & Insights */}
+                <div className="flex-1 space-y-8 w-full">
+                  {/* Strategic Intelligence Header */}
+                  <div className="bg-[#1b2537] p-8 rounded-[2rem] border border-white/5 shadow-2xl">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 mb-8">
+                       <div className="flex items-center gap-4">
+                         <div className="w-14 h-14 bg-emerald-600/10 rounded-2xl flex items-center justify-center text-emerald-500">
+                           <BrainCircuit size={32} />
+                         </div>
+                         <div>
+                           <h3 className="text-2xl font-black text-white">Operational Insights</h3>
+                           <p className="text-slate-500 text-sm">Strategic pattern detection across all stored logs.</p>
+                         </div>
+                       </div>
+                       <button 
+                         onClick={handleGenerateInsights} 
+                         disabled={isGeneratingInsights || storedReports.length < 2}
+                         className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-xl font-bold transition-all shadow-lg active:scale-95 disabled:opacity-30 flex items-center gap-2 text-sm"
+                       >
+                         {isGeneratingInsights ? <RefreshCw className="animate-spin" /> : <TrendingUp size={18} />}
+                         Generate Insights
+                       </button>
+                    </div>
+
+                    {operationalInsights ? (
+                      <div className="bg-slate-950/40 border border-emerald-500/20 rounded-2xl p-8 animate-in slide-in-from-top-4 duration-500">
+                         <MarkdownRenderer content={operationalInsights} />
+                      </div>
+                    ) : (
+                      <div className="text-center py-12 border border-dashed border-slate-700 rounded-3xl opacity-50">
+                        <History size={48} className="mx-auto mb-4 text-slate-500" />
+                        <p className="text-slate-400 font-medium">Insufficient data. Analysis requires at least 2 logs.</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Frequency Chart */}
+                  {storedReports.length > 0 && <IncidentChart reports={storedReports} />}
+
+                  {/* Audit Stream */}
+                  <div className="space-y-6">
+                    <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] ml-2">Recent Audit Stream</h4>
+                    {storedReports.length > 0 ? (
+                      storedReports.slice(0, 5).map(report => (
+                        <div key={report.id} className="bg-[#1b2537] p-8 rounded-[2rem] border border-white/5 shadow-xl animate-in fade-in duration-300">
+                          <div className="flex justify-between items-center mb-6">
+                            <span className="bg-blue-600/10 text-blue-400 px-4 py-1 rounded-full text-xs font-black uppercase tracking-widest">{report.dateStr}</span>
+                            <ShareButton title={`AntiRisk Audit: ${report.dateStr}`} content={report.analysis} />
+                          </div>
+                          <MarkdownRenderer content={report.analysis} />
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-20 bg-slate-900/40 rounded-3xl border border-dashed border-slate-800">
+                        <ShieldAlert size={64} className="mx-auto text-slate-700 mb-6" />
+                        <h4 className="text-slate-500 font-bold text-xl">Operational Vault Empty</h4>
+                        <p className="text-slate-600 max-w-xs mx-auto mt-2">Upload field logs to begin building your operational intelligence database.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {currentView === View.WEEKLY_TIPS && (
+             <div className="max-w-4xl mx-auto space-y-10 animate-in fade-in duration-500">
+                <div className="flex flex-col sm:flex-row justify-between items-center bg-slate-800/20 p-10 rounded-[2.5rem] border border-slate-700/50 gap-6 shadow-2xl">
+                   <div>
+                     <h2 className="text-4xl font-black text-white tracking-tight">Standard of Excellence</h2>
+                   </div>
+                   <button onClick={() => handleGenerateWeeklyTip(true)} disabled={isTipLoading} className="w-full sm:w-auto bg-amber-600 hover:bg-amber-700 px-10 py-5 rounded-2xl font-black text-white flex items-center justify-center gap-3 active:scale-95 shadow-xl">
+                     {isTipLoading ? <RefreshCw className="animate-spin" /> : <Sparkles />} New Intelligence
+                   </button>
+                </div>
+                <div className="space-y-10">
+                  {weeklyTips.map(tip => (
+                    <div key={tip.id} className="bg-[#1b2537] p-10 rounded-[3rem] border border-white/5 shadow-2xl">
+                      <div className="flex justify-between items-start mb-8">
+                        <div>
+                          <span className="text-[10px] text-blue-500 font-black uppercase tracking-[0.3em] mb-3 block">{tip.weekDate}</span>
+                          <h4 className="text-3xl font-black text-white leading-tight">{tip.topic}</h4>
+                        </div>
+                        <ShareButton title={`AntiRisk Intelligence: ${tip.topic}`} content={tip.content} />
+                      </div>
+                      <MarkdownRenderer content={tip.content} />
+                    </div>
+                  ))}
+                </div>
+             </div>
+          )}
+        </div>
+      </main>
+
+      {/* AUTO-DISPATCH OVERLAY */}
+      {showDispatchOverlay && pendingDispatchTip && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-xl p-6 animate-in zoom-in-95 duration-300">
+          <div className="bg-[#111827] border-2 border-blue-500/50 rounded-[3rem] p-10 w-full max-w-lg shadow-[0_0_50px_rgba(37,99,235,0.3)] text-center">
+            <div className="w-24 h-24 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-8 shadow-xl">
+              <Bell size={48} className="text-white animate-bounce" />
+            </div>
+            <h2 className="text-3xl font-black text-white mb-4 tracking-tight uppercase">Bi-Weekly Alert Ready</h2>
+            <p className="text-slate-400 text-lg mb-10 leading-relaxed">
+              New Intelligence synthesized: <span className="text-blue-400 font-bold">"{pendingDispatchTip.topic}"</span>.
+              Dispatch protocols are active for your registered WhatsApp and Email.
+            </p>
+            <div className="space-y-4">
+              <button 
+                onClick={() => triggerDispatch('WHATSAPP')}
+                className="w-full bg-[#25d366] hover:bg-green-600 py-6 rounded-3xl font-black text-xl text-white flex items-center justify-center gap-4 transition-all active:scale-95 shadow-xl"
+              >
+                <MessageCircle size={28} /> Execute WhatsApp Dispatch
+              </button>
+              <button 
+                onClick={() => triggerDispatch('EMAIL')}
+                className="w-full bg-[#2962ff] hover:bg-blue-700 py-6 rounded-3xl font-black text-xl text-white flex items-center justify-center gap-4 transition-all active:scale-95 shadow-xl"
+              >
+                <Mail size={28} /> Execute Email Dispatch
+              </button>
+              <button 
+                onClick={() => setShowDispatchOverlay(false)}
+                className="w-full text-slate-500 font-bold uppercase tracking-widest text-sm pt-4"
+              >
+                Dismiss Protocols
+              </button>
+            </div>
           </div>
         </div>
+      )}
 
-        {/* Modals & Toasts */}
-        {showSettings && renderSettingsModal()}
-        {showNewTipAlert && renderNewTipAlertModal()}
-        {showKbModal && renderKbModal()}
-        {showBpToast && renderToast()}
-      </main>
-    </div>
-  );
-}
+      {/* AI KNOWLEDGE BASE MODAL */}
+      {showKbModal && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-[#0a0f1a]/90 backdrop-blur-md p-4 animate-in fade-in duration-300">
+          <div className="bg-[#111827] rounded-[2rem] border border-white/5 w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-8 pb-6 flex justify-between items-start">
+              <div className="flex gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 flex items-center justify-center text-emerald-500 shadow-inner">
+                  <Database size={32} />
+                </div>
+                <div>
+                  <h2 className="text-[22px] font-bold text-white leading-tight tracking-tight">Knowledge Base Manager</h2>
+                  <p className="text-slate-400 text-[13px] mt-1 opacity-80">Upload policies and reports.</p>
+                </div>
+              </div>
+              <button onClick={() => setShowKbModal(false)} className="p-2 text-slate-500 hover:text-white transition-colors">
+                <X size={24} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-8 pt-2 space-y-10 scrollbar-hide">
+              <div className="bg-[#1f2937] rounded-3xl p-6 border border-white/5 space-y-4 shadow-xl">
+                <div className="flex items-center gap-2 text-white font-bold text-[13px]">
+                  <Upload size={16} className="text-blue-400" />
+                  Add New Document
+                </div>
+                <input value={newDocTitle} onChange={(e) => setNewDocTitle(e.target.value)} placeholder="Title" className="w-full bg-[#111827] border border-slate-700/50 rounded-xl px-5 py-3.5 text-white outline-none focus:border-blue-500 transition-colors text-[14px]" />
+                <textarea value={newDocContent} onChange={(e) => setNewDocContent(e.target.value)} placeholder="Content" className="w-full bg-[#111827] border border-slate-700/50 rounded-xl px-5 py-4 text-white outline-none focus:border-blue-500 transition-colors h-36 resize-none text-[14px]" />
+                <div className="flex justify-end pt-2">
+                  <button onClick={handleAddKbDocument} disabled={!newDocTitle.trim() || !newDocContent.trim()} className="flex items-center gap-2 bg-[#2563eb] hover:bg-blue-700 disabled:opacity-30 text-white px-7 py-2.5 rounded-xl font-bold transition-all shadow-lg active:scale-95">
+                    <Plus size={18} /> Add to Memory
+                  </button>
+                </div>
+              </div>
+              <div className="space-y-6">
+                <h4 className="text-[12px] font-black text-slate-500 uppercase tracking-widest">STORED ({knowledgeBase.length})</h4>
+                {knowledgeBase.map(doc => (
+                  <div key={doc.id} className="bg-[#1f2937]/50 border border-white/5 rounded-2xl p-4 flex justify-between items-center group">
+                    <div className="flex items-center gap-4">
+                      <div className="w-11 h-11 rounded-xl bg-slate-800 flex items-center justify-center text-slate-400 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-inner">
+                        <FileText size={22} />
+                      </div>
+                      <h5 className="text-[15px] font-bold text-white leading-tight">{doc.title}</h5>
+                    </div>
+                    <button onClick={() => handleRemoveKbDocument(doc.id)} className="p-3 text-slate-500 hover:text-red-500 active:scale-90 transition-all"><Trash2 size={20} /></button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
-export default App;
+      {/* Profile & Alert Settings */}
+      {showSettings && (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center bg-black/95 backdrop-blur-lg p-4 animate-in fade-in duration-300">
+          <div className="bg-[#0d1421] rounded-[3rem] border border-slate-700/50 p-12 w-full max-w-md shadow-2xl h-[85vh] overflow-y-auto scrollbar-hide">
+            <div className="flex justify-between items-center mb-12">
+              <h2 className="text-3xl font-black text-white tracking-tight uppercase">Executive Settings</h2>
+              <button onClick={() => setShowSettings(false)} className="p-3 bg-slate-800/50 rounded-full active:scale-90"><X size={24} /></button>
+            </div>
+            
+            <div className="space-y-10">
+              <div className="space-y-4">
+                <h4 className="text-[10px] font-black text-blue-500 uppercase tracking-[0.2em]">Profile Credentials</h4>
+                <input value={userProfile.name} onChange={(e) => setUserProfile({...userProfile, name: e.target.value})} className="w-full bg-slate-950/50 border border-slate-700 p-6 rounded-2xl outline-none text-white font-bold text-lg" placeholder="CEO Full Name" />
+              </div>
+
+              <div className="space-y-4">
+                <h4 className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.2em]">Dispatch Protocols</h4>
+                <div className="space-y-3">
+                   <div className="relative">
+                     <MessageCircle className="absolute left-6 top-6 text-slate-500" size={20} />
+                     <input value={userProfile.phoneNumber} onChange={(e) => setUserProfile({...userProfile, phoneNumber: e.target.value})} className="w-full bg-slate-950/50 border border-slate-700 p-6 pl-14 rounded-2xl outline-none text-white font-bold text-lg" placeholder="+234 WhatsApp Number" />
+                   </div>
+                   <div className="relative">
+                     <Mail className="absolute left-6 top-6 text-slate-500" size={20

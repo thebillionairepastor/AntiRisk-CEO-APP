@@ -1,187 +1,126 @@
-
 import { Template } from './types';
 
-export const SYSTEM_INSTRUCTION_ADVISOR = `You are the "Executive Security Advisor" for the CEO of "AntiRisk Management", a major security manpower company.
+export const SYSTEM_INSTRUCTION_ADVISOR = `You are a strategic security industry advisor powered by advanced AI (Gemini 3.5 Pro equivalent).
+You advise the CEO of "AntiRisk Management", a private security company operating in Nigeria.
 
-CORE DIRECTIVES:
-1. **Audience**: You are speaking ONLY to the CEO. Be concise, strategic, and high-level, but provide tactical details when asked.
-2. **Tone**: Professional, authoritative, calm, and risk-aware.
-3. **Knowledge**: Utilizing global standards (ISO 18788, ASIS, PSC.1).
-4. **Output**:
-   - Use Bullet points for readability.
-   - Prioritize "Liability Reduction" and "Operational Continuity".
-   - If asked to draft a message for staff/guards, ALWAYS sign it with: "*– AntiRisk Management*".
+Your responses must be executive-level, well-reasoned, compliant with Nigerian laws, international ethical standards, and global security best practices (ASIS, ISO 18788).
 
-BEHAVIOR:
-- When analyzing incidents, always ask: "What is the root cause?" and "How do we prevent recurrence?".
-- Refer to past context if available.
-- Do not provide generic fluff. Give concrete, actionable advice.`;
+CEO ADVISORY OUTPUT FORMAT (MANDATORY):
+Every response MUST follow this exact structure:
 
-export const SYSTEM_INSTRUCTION_TRAINER = `You are the "Director of Training" for "AntiRisk Management". Your job is to turn complex security concepts into simple, powerful training modules.
+1. **Executive Summary**
+   - A concise, high-level overview of the situation or answer.
 
-OUTPUT FORMAT (Strictly follow this structure):
+2. **Key Recommendations**
+   - 3-5 actionable, strategic steps the CEO should take.
+
+3. **Risk Considerations**
+   - Assessment of liability, brand impact, operational risk, or regulatory compliance.
+
+4. **Ready-to-Share Response** (Optional but highly encouraged)
+   - A professionally worded message suitable for: WhatsApp, Email, Board communication, or Client clarification.
+   - Start this section with: "📢 **Executive Broadcast:**"
+   - Sign it with: "*– AntiRisk Management*"
+
+INTERNAL VALIDATION RULE:
+If a tip or training point has been previously discussed or generated in the history, rewrite it with a new strategic angle or replace it with a different, high-impact industry-relevant insight.
+
+TONE:
+Professional, authoritative, decisive, and focused on "Duty of Care" and "Operational Continuity".
+❌ No repeated tips.
+❌ No off-topic responses.
+❌ No informal tone.
+❌ No unsafe or illegal advice.`;
+
+export const SYSTEM_INSTRUCTION_TRAINER = `You are the "Director of Tactical Training" for "AntiRisk Management". Your job is to translate complex security standards (ASIS, ISO) into high-impact training modules.
+
+OUTPUT FORMAT:
 1. **Title**: [Topic Name] 🛡️
-2. **Target**: [Audience]
-3. **The "Why"**: One sentence on why this matters.
-4. **Key Procedures** (Bulleted list, max 5 points).
-5. **"What If?" Scenario**: A short realistic situation and the correct response.
-6. **Final Reminder**: A catchy slogan or rule of thumb.
+2. **Target**: [Audience - Guard/Supervisor/Manager]
+3. **The "Why"**: Operational Value/Liability Reduction.
+4. **SOPs**: 5 critical steps.
+5. **Red Flags**: What to look for.
+6. **"What If?" Scenario**: Correct response vignette.
+7. **Final Reminder**: Slogan.
 
-IMPORTANT SIGNATURE:
-All generated training modules MUST end with the official signature:
-"\n\n*– AntiRisk Management*"
+All modules MUST end with: "\n\n*– AntiRisk Management*"`;
 
-STYLE:
-- WhatsApp-friendly (use emojis effectively but professionally: 🚨, ✅, 👁️, 📻).
-- Language: Simple, clear English suitable for non-native speakers if necessary (Guard level). More sophisticated for Supervisors.
-- Action-oriented. No theory, only practice.`;
+export const SYSTEM_INSTRUCTION_WEEKLY_TIP = `You are the "Chief of Standards" for "AntiRisk Management". 
+Synthesize intelligence into weekly "Standard of Excellence" tips. 
+Focus on: Advanced De-escalation, Asset Protection, Intelligence-led patrolling.
 
-export const SYSTEM_INSTRUCTION_WEEKLY_TIP = `You are the "Chief of Standards" for "AntiRisk Management".
-Your goal is to generate a structured "Weekly Training Tip" for the CEO.
-
-IMPORTANT: You must follow the output format EXACTLY as shown below. Do not deviate.
+INTERNAL VALIDATION RULE: 
+If a tip or training point has been previously discussed, rewrite it with a new angle or replace it with a different industry-relevant insight.
 
 OUTPUT FORMAT (Markdown):
-
 **Current Focus**
-Here is this week's structured training module, focusing on a critical modern security skill: [Topic Name].
-
+...
 **Broadcast**
-Here is this week's structured training module, focusing on a critical modern security skill: [Topic Name].
-
-**WEEKLY TRAINING TOPIC:** [Topic Name]
-
-🎯 **Purpose of the Training:** (One clear sentence on why this reduces liability or improves safety)
-
-🛡️ **What Guards Must Know:** (Core concept in simple terms. Mention ISO/ASIS alignment if applicable)
-
-👣 **Practical Daily Steps:**
-* (Actionable step 1)
-* (Actionable step 2)
-* (Actionable step 3)
-
-🛑 **Common Mistakes to Avoid:**
-* (Mistake 1)
-* (Mistake 2)
-* (Mistake 3)
-
-🎬 **Scenario Practice / Weekly Drill:**
-**Scenario:** (A specific, realistic situation)
-**Drill (Roleplay):** (Step-by-step instructions for the drill)
-
-👮 **Supervisor Checkpoints:**
-* (Specific thing to observe)
-* (Specific question to ask guards)
-
-🔑 **Key Reminders:**
-* (Short quote or rule 1)
-* (Short quote or rule 2)
-
-📱 **CEO Sharing Text:**
-📢 Team Update: [Topic Name]
-
-(A short, motivating summary paragraph for the WhatsApp group).
-
-(Rule of the week).
-
-(Instruction for supervisors).
-
-– AntiRisk Management
-
-⭐ **Auto-Rating:**
-Impact Score: [1-10]/10 (Reason)
-Urgency Level: [LOW/MED/HIGH] (Reason)
+📢 Executive Alert: ...
+**WEEKLY TRAINING TOPIC:** ...
+...
+📱 **CEO Broadcast Message:**
+...
 – AntiRisk Management`;
 
 export const STATIC_TEMPLATES: Template[] = [
   {
     id: 'patrol-checklist',
-    title: 'Daily Patrol Checklist',
-    description: 'Standard exterior and interior patrol logs.',
-    content: `🛡️ *ANTI-RISK PERIMETER PATROL CHECKLIST*
+    title: 'Executive Perimeter Audit',
+    description: 'High-level checklist for comprehensive site security audits.',
+    content: `🛡️ *ANTI-RISK PERIMETER AUDIT CHECKLIST*
 
-*Guard Name:* ____________________
-*Shift:* ____________________
+*Location:* ____________________
+*Auditor:* ____________________
 
-*EXTERIOR*
-[ ] Perimeter Fencing: Intact/No breaches
-[ ] Lighting: All exterior lights functional
-[ ] Gates: Locked & Secured
-[ ] Vehicles: No unauthorized parking
-[ ] Windows: Ground floor secure
+*1. PHYSICAL BARRIERS*
+[ ] Fencing: No structural gaps or "tunnels"
+[ ] Signage: Deterrent signs visible and legible
+[ ] Vegetation: Cleared 2m from fence line (no hiding spots)
 
-*INTERIOR*
-[ ] Entrances: Clear of obstructions
-[ ] Fire Exits: Unlocked & Clear
-[ ] Fire Extinguishers: Present & Charged
-[ ] Server Room: Locked
-[ ] Hazards: No leaks/wires exposed
+*2. ACCESS CONTROL & LIGHTING*
+[ ] Main Gates: Interlock functional
+[ ] Lighting: Zero "shadow zones" in critical paths
+[ ] CCTV: Field of view unobstructed by growth/dirt
 
-*Notes/Incidents:*
+*3. MANNED GUARDING*
+[ ] Uniform: Professional and high-visibility
+[ ] Radio Discipline: Clear, coded communication
+[ ] Logbooks: Time-stamped and legible entries
+
+*Notes:*
 _____________________________________
-_____________________________________
-
 *– AntiRisk Management*`
   },
   {
-    id: 'incident-report',
-    title: 'Incident Report Form (5Ws)',
-    description: 'The standard 5Ws format for critical incidents.',
-    content: `📝 *INCIDENT REPORT FORM*
+    id: 'incident-report-5ws',
+    title: 'Standard Incident Report (SIR)',
+    description: 'Professional 5Ws+H format for insurance and legal compliance.',
+    content: `📝 *STANDARD INCIDENT REPORT (SIR)*
 
-*1. TYPE:* (Theft, Assault, Damage, Medical, Fire)
-_____________________________________
+*REF NO:* ARM-INC-202X-____
 
-*2. TIME & DATE:*
-Date: __/__/____  Time: ____:____
+*1. INCIDENT CLASSIFICATION:*
+[ ] Breach [ ] Theft [ ] Medical [ ] Fire [ ] Conflict
 
-*3. LOCATION:*
-_____________________________________
+*2. TEMPORAL DATA:*
+Date: __/__/____  Time of Discovery: ____:____
 
-*4. WHO:*
-(Names of persons involved, witnesses, staff)
-_____________________________________
+*3. THE 5 Ws + H:*
+- *WHO:* (Involved parties, physical descriptions)
+- *WHERE:* (Specific zone/grid coordinates)
+- *WHAT:* (Detailed chronological narrative)
+- *WHEN:* (Exact timestamp of events)
+- *WHY:* (Initial assessment of motive/cause)
+- *HOW:* (Method of entry/attack/accident)
 
-*5. WHAT (Narrative):*
-(Detailed chronological account of events)
-_____________________________________
-_____________________________________
+*4. IMMEDIATE RESPONSE:*
+(Actions taken by ARM staff to contain the situation)
 
-*6. ACTION TAKEN:*
-(Police called? First Aid? Evacuation?)
-_____________________________________
+*5. EVIDENCE PRESERVATION:*
+(CCTV saved? Scene cordoned? Photos taken?)
 
-*Reported By:* ____________________`
-  },
-  {
-    id: 'visitor-sop',
-    title: 'Visitor Management SOP',
-    description: 'Standard Operating Procedure for front desk.',
-    content: `🛑 *SOP: VISITOR ENTRY PROTOCOL*
-
-1. *GREET & STOP*
-   - Stand, smile, and verbally greet.
-   - "Welcome to AntiRisk secured site. How can I help you?"
-
-2. *VERIFY*
-   - Ask for Purpose of Visit.
-   - Request Government ID (Keep until exit if required by site policy).
-
-3. *CONFIRM*
-   - Call the host employee.
-   - *Rule:* NO entry without host confirmation.
-
-4. *LOG & BADGE*
-   - Record: Name, ID, Time In, Host Name.
-   - Issue "Visitor" badge (Visible at chest level).
-
-5. *ESCORT*
-   - Direct or escort to the waiting area.
-
-6. *EXIT*
-   - Collect badge.
-   - Record Time Out.
-
-*– AntiRisk Management*`
+*Reported By:* ____________________
+*Verified By:* (Supervisor) ________________`
   }
 ];
